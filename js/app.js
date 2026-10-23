@@ -6,7 +6,8 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n = v => (v == null || v === '' ? null : Number(v));
 const fmt = (v, d = 2) => (v == null || isNaN(v) ? '–' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: d }));
-const fmtTeken = v => (v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v)));
+const fmtU = v => (v == null || isNaN(v) ? '–' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const fmtTeken = (v, f = fmt) => (v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + f(Math.abs(v)));
 const klasseTeken = v => (v > 0 ? 'plus' : v < 0 ? 'min' : '');
 const pad = x => String(x).padStart(2, '0');
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -20,6 +21,27 @@ const dfMaand = new Intl.DateTimeFormat('nl-NL', { month: 'long' });
 const kort = s => dfKort.format(datum(s)).replace('.', '');
 const jaarVan = s => +s.slice(0, 4);
 const DAGNAMEN = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+const JAAR_MIN = 2000, JAAR_MAX = 2100;
+const geldigJaar = j => (Number.isInteger(j) && j >= JAAR_MIN && j <= JAAR_MAX ? j : DIT_JAAR);
+
+// Grenzen voor invoer: houdt onzin uit de database en geeft een begrijpelijke melding
+function controleer(waarde, { min, max, naam, heel = false }) {
+  if (waarde == null || Number.isNaN(waarde)) throw new Error(`Vul bij ${naam} een getal in.`);
+  if (waarde < min || waarde > max) throw new Error(`${naam[0].toUpperCase()}${naam.slice(1)} moet tussen ${fmt(min)} en ${fmt(max)} liggen.`);
+  if (heel && !Number.isInteger(waarde)) throw new Error(`Vul bij ${naam} een heel getal in.`);
+  return waarde;
+}
+
+// Technische databasemeldingen omzetten naar gewone taal
+function begrijpelijk(e) {
+  const m = String(e?.message || e || '');
+  if (/numeric field overflow|out of range/i.test(m)) return 'Dit getal is te groot. Controleer wat je hebt ingevuld.';
+  if (/violates check constraint/i.test(m)) return 'Deze waarde kan niet. Controleer of de getallen en datums kloppen.';
+  if (/duplicate key|already exists/i.test(m)) return 'Dit bestaat al.';
+  if (/JWT|not authenticated|permission denied|row-level security/i.test(m)) return 'Je bent niet meer ingelogd. Ververs de pagina en log opnieuw in.';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Geen verbinding. Controleer je internet en probeer het opnieuw.';
+  return m || 'Er ging iets mis. Probeer het opnieuw.';
+}
 
 function periode(van, tot) {
   const sfx = s => (jaarVan(s) !== DIT_JAAR ? ` ${jaarVan(s)}` : '');
@@ -50,7 +72,7 @@ async function bewaar(fn, ok = 'Opgeslagen') {
     if (ok) melding(ok);
     return true;
   } catch (e) {
-    melding(e.message || 'Opslaan is niet gelukt', true);
+    melding(begrijpelijk(e), true);
     return false;
   }
 }
@@ -91,6 +113,7 @@ function skelet() {
 async function router() {
   const [, view = 'overzicht', arg] = location.hash.split('/');
   const geldig = VIEWS.some(([k]) => k === view) ? view : 'overzicht';
+  if (arg != null && geldigJaar(+arg) !== +arg) { location.hash = `#/${geldig}`; return; }
   $$('.nav a').forEach(a => (a.dataset.view === geldig ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
   const main = $('#inhoud');
   main.innerHTML = '<p class="laden">Gegevens ophalen…</p>';
@@ -99,7 +122,8 @@ async function router() {
   } catch (e) {
     console.error(e);
     main.innerHTML = `<div class="vlak" style="margin-top:2rem"><h2 style="margin-top:0">Dit scherm laadt niet</h2>
-      <p>${esc(e.message)}</p><p class="muted">Controleer je verbinding en probeer het opnieuw. Staat het schema <code>urenbank</code> bij Exposed schemas in Supabase?</p>
+      <p>${esc(begrijpelijk(e))}</p><p class="muted">Lukt het daarna nog niet, laat dan de tekst hieronder zien aan wie de app beheert.</p>
+      <p class="info">${esc(e.message)}</p>
       <button class="knop" onclick="location.reload()">Opnieuw laden</button></div>`;
   }
 }
@@ -119,7 +143,9 @@ async function toonOverzicht(main) {
     instellingen(),
   ]);
   const upd = n(s.uren_per_dag), upw = n(s.uren_per_week);
-  const geldig = p => p.soort !== 'tekort' && (p.vervalt_op ?? '9999') >= VANDAAG;
+  // Alleen potjes die vandaag beschikbaar en niet vervallen zijn (potjes van volgend jaar pas vanaf 1 januari)
+  const zichtbaar = p => p.soort === 'tekort' || (p.beschikbaar_vanaf <= VANDAAG && (p.vervalt_op ?? '9999') >= VANDAAG);
+  const geldig = p => p.soort !== 'tekort' && zichtbaar(p);
 
   // Balk: potjes met rest + urenbank (positief)
   const segmenten = potjes.filter(p => geldig(p) && n(p.rest) > 0).map((p, i) => ({ naam: potjeNaam(p), uren: n(p.rest), kleur: POTKLEUR[i % POTKLEUR.length] }));
@@ -133,19 +159,19 @@ async function toonOverzicht(main) {
   main.innerHTML = `
     <section class="stand" aria-labelledby="stand-label">
       <p class="stand-label" id="stand-label">Vrij op te nemen per vandaag</p>
-      <p class="stand-getal num">${fmt(s.totaal)}<small>uur</small></p>
+      <p class="stand-getal num">${fmtU(s.totaal)}<small>uur</small></p>
       <p class="stand-om">Dat is <strong>${fmt(s.totaal / upd, 1)} werkdagen</strong> van ${fmt(upd)} uur, of <strong>${fmt(s.totaal / upw, 1)} werkweken</strong> van ${fmt(upw)} uur.
-        Opgebouwd uit ${fmt(s.verlof_saldo)} uur verlofsaldo (zoals bij P&amp;O) en ${fmtTeken(n(s.urenbank))} uur op je urenbank.</p>
-      <div class="balk" role="img" aria-label="Verdeling: ${segmenten.map(x => `${x.naam} ${fmt(x.uren)} uur`).join(', ')}">
-        ${segmenten.map(x => `<div style="flex:${x.uren / totaalBalk};background:${x.kleur}" title="${esc(x.naam)}: ${fmt(x.uren)} uur"></div>`).join('')}
+        Opgebouwd uit ${fmtU(s.verlof_saldo)} uur verlofsaldo (zoals bij P&amp;O) en ${fmtTeken(n(s.urenbank), fmtU)} uur op je urenbank ${esc(s.urenbank_jaar)}.</p>
+      <div class="balk" role="img" aria-label="${esc(`Verdeling: ${segmenten.map(x => `${x.naam} ${fmtU(x.uren)} uur`).join(', ')}`)}">
+        ${segmenten.map(x => `<div style="flex:${x.uren / totaalBalk};background:${x.kleur}" title="${esc(x.naam)}: ${fmtU(x.uren)} uur"></div>`).join('')}
       </div>
       <ul class="legenda">
-        ${segmenten.map(x => `<li><span class="stip" style="background:${x.kleur}"></span>${esc(x.naam)} <span class="num">${fmt(x.uren)}</span></li>`).join('')}
+        ${segmenten.map(x => `<li><span class="stip" style="background:${x.kleur}"></span>${esc(x.naam)} <span class="num">${fmtU(x.uren)}</span></li>`).join('')}
       </ul>
       <div class="plan">
-        <p>Na al je geplande verlof: <strong class="num">${fmt(s.totaal_na_planning)} uur</strong>
-          <span class="muted">(${fmt(s.verlof_saldo_na_planning)} verlofsaldo, ${fmt(s.urenbank_na_planning)} urenbank)</span></p>
-        ${gepland.length ? `<ul>${gepland.map(v => `<li>${esc(v.omschrijving)}, ${periode(v.begin, v.eind)}: ${fmt(v.kosten_uren)} uur van ${BRON[v.bron].toLowerCase()}${v.bron === 'saldo' && !v.geboekt ? ', nog niet geboekt bij P&amp;O' : ''}</li>`).join('')}</ul>` : '<p class="muted">Je hebt geen verlof gepland.</p>'}
+        <p>Na al je geplande verlof: <strong class="num">${fmtU(s.totaal_na_planning)} uur</strong>
+          <span class="muted">(${fmtU(s.verlof_saldo_na_planning)} verlofsaldo, ${fmtU(s.urenbank_na_planning)} urenbank)</span></p>
+        ${gepland.length ? `<ul>${gepland.map(v => `<li>${esc(v.omschrijving)}, ${periode(v.begin, v.eind)}: ${fmtU(v.kosten_uren)} uur van ${BRON[v.bron].toLowerCase()}${v.bron === 'saldo' && !v.geboekt ? ', nog niet geboekt bij P&amp;O' : ''}</li>`).join('')}</ul>` : '<p class="muted">Je hebt geen verlof gepland.</p>'}
       </div>
     </section>
 
@@ -168,34 +194,36 @@ async function toonOverzicht(main) {
     </div>
 
     <h2>Verlofsaldo per potje</h2>
-    ${potjesTabel(potjes, potjesPlan)}
+    ${potjesTabel(potjes.filter(zichtbaar), potjesPlan, s)}
     <p class="info">De volgorde van afschrijven en de vervaldatums stel je in bij Instellingen. Geboekt verlof gaat eraf, ook als het in de toekomst ligt; gepland verlof zie je in de laatste kolom.</p>`;
 
   $('#deze-week')?.addEventListener('change', async e => {
     const v = n(e.target.value);
-    const ok = await bewaar(() => (v == null
+    const ok = await bewaar(() => (v != null && controleer(v, { min: 0, max: 100, naam: 'de weekuren' }), v == null
       ? api.remove('week_uren', { jaar: DIT_JAAR, weeknr: deze.weeknr })
       : api.upsert('week_uren', { jaar: DIT_JAAR, weeknr: deze.weeknr, timetell_uren: v })));
     if (ok) herlaad();
   });
 }
 
-function potjesTabel(potjes, plan) {
+function potjesTabel(potjes, plan, s) {
   const restPlan = id => plan.find(p => p.potje_id === id)?.rest;
-  const tot = k => potjes.filter(p => p.soort !== 'tekort').reduce((a, p) => a + n(p[k]), 0);
-  const totPlan = plan.filter(p => p.soort !== 'tekort').reduce((a, p) => a + n(p.rest), 0) + (plan.find(p => p.soort === 'tekort') ? n(plan.find(p => p.soort === 'tekort').rest) : 0);
+  const echt = potjes.filter(p => p.soort !== 'tekort');
+  const tekortNu = n(s.verlof_tekort) || 0;
+  const tekortPlan = plan.find(p => p.soort === 'tekort');
+  const som = k => echt.reduce((a, p) => a + n(p[k]), 0);
   return `<div class="tabel-wrap"><table>
     <thead><tr><th>Soort</th><th class="r">Begin</th><th class="r">Opgenomen</th><th class="r">Rest</th><th>Vervalt</th><th class="r">Rest na planning</th></tr></thead>
-    <tbody>${potjes.map(p => `<tr>
+    <tbody>${echt.map(p => `<tr>
       <td>${esc(potjeNaam(p))}</td>
-      <td class="r num">${fmt(p.begin_uren)}</td>
-      <td class="r num">${fmt(p.opgenomen)}</td>
-      <td class="r num"><strong>${fmt(p.rest)}</strong></td>
-      <td>${p.vervalt_op ? `${(p.vervalt_op < VANDAAG && n(p.rest) > 0) ? '<span class="chip feest">vervallen</span> ' : ''}${kort(p.vervalt_op)} ${jaarVan(p.vervalt_op)}` : ''}</td>
-      <td class="r num">${p.potje_id != null ? fmt(restPlan(p.potje_id)) : ''}</td></tr>`).join('')}
-      ${plan.some(p => p.soort === 'tekort') && !potjes.some(p => p.soort === 'tekort') ? `<tr><td>Tekort na planning</td><td></td><td></td><td></td><td></td><td class="r num min">${fmt(plan.find(p => p.soort === 'tekort').rest)}</td></tr>` : ''}
+      <td class="r num">${fmtU(p.begin_uren)}</td>
+      <td class="r num">${fmtU(p.opgenomen)}</td>
+      <td class="r num"><strong>${fmtU(p.rest)}</strong></td>
+      <td>${p.vervalt_op ? `${kort(p.vervalt_op)} ${jaarVan(p.vervalt_op)}` : ''}</td>
+      <td class="r num">${fmtU(restPlan(p.potje_id))}</td></tr>`).join('')}
+      ${tekortNu || tekortPlan ? `<tr><td class="min">Tekort</td><td></td><td></td><td class="r num min">${tekortNu ? fmtU(-tekortNu) : ''}</td><td></td><td class="r num min">${tekortPlan ? fmtU(tekortPlan.rest) : ''}</td></tr>` : ''}
     </tbody>
-    <tfoot><tr><td>Totaal</td><td class="r num">${fmt(tot('begin_uren'))}</td><td class="r num">${fmt(tot('opgenomen'))}</td><td class="r num">${fmt(tot('rest'))}</td><td></td><td class="r num">${fmt(totPlan)}</td></tr></tfoot>
+    <tfoot><tr><td>Totaal</td><td class="r num">${fmtU(som('begin_uren'))}</td><td class="r num">${fmtU(som('opgenomen'))}</td><td class="r num">${fmtU(n(s.verlof_saldo) - tekortNu)}</td><td></td><td class="r num">${fmtU(s.verlof_saldo_na_planning)}</td></tr></tfoot>
   </table></div>`;
 }
 
@@ -204,10 +232,10 @@ function maakSignalen({ s, potjesPlan, weken, verlof, inst }) {
   const horizon = plusDagen(VANDAAG, 60);
   for (const v of verlof) {
     if (v.bron === 'saldo' && !v.geboekt && v.begin <= horizon) {
-      uit.push([v.begin < VANDAAG ? 'fout' : 'let-op', `<span><strong>${esc(v.omschrijving)}</strong> (${periode(v.begin, v.eind)}) is nog niet geboekt bij P&amp;O. Boek ${fmt(v.kosten_uren)} uur.</span>`]);
+      uit.push([v.begin < VANDAAG ? 'fout' : 'let-op', `<span><strong>${esc(v.omschrijving)}</strong> (${periode(v.begin, v.eind)}) is nog niet geboekt bij P&amp;O. Boek ${fmtU(v.kosten_uren)} uur.</span>`]);
     }
     if (v.geboekt && v.verschil_geboekt != null && Math.abs(n(v.verschil_geboekt)) >= 0.5) {
-      uit.push(['let-op', `<span><strong>${esc(v.omschrijving)}</strong>: geboekt ${fmt(v.geboekte_uren)} uur, berekend ${fmt(v.kosten_uren)} uur.</span>`]);
+      uit.push(['let-op', `<span><strong>${esc(v.omschrijving)}</strong>: geboekt ${fmtU(v.geboekte_uren)} uur, berekend ${fmtU(v.kosten_uren)} uur.</span>`]);
     }
   }
   const open = weken.filter(w => w.tot < VANDAAG && w.van >= inst.startdatum && w.timetell_uren == null);
@@ -215,19 +243,26 @@ function maakSignalen({ s, potjesPlan, weken, verlof, inst }) {
   const grens = plusDagen(VANDAAG, inst.waarschuw_dagen);
   for (const p of potjesPlan) {
     if (p.soort !== 'tekort' && n(p.rest) > 0 && p.vervalt_op && p.vervalt_op >= VANDAAG && p.vervalt_op <= grens) {
-      uit.push(['fout', `<span>${fmt(p.rest)} uur ${esc(potjeNaam(p).toLowerCase())} vervalt op ${kort(p.vervalt_op)} ${jaarVan(p.vervalt_op)}, ook na je planning. Plan dit verlof in.</span>`]);
+      uit.push(['fout', `<span>${fmtU(p.rest)} uur ${esc(potjeNaam(p).toLowerCase())} vervalt op ${kort(p.vervalt_op)} ${jaarVan(p.vervalt_op)}, ook na je planning. Plan dit verlof in.</span>`]);
     }
   }
   const tekort = potjesPlan.find(p => p.soort === 'tekort');
-  if (tekort) uit.push(['fout', `<span>Je plant ${fmt(tekort.opgenomen)} uur meer verlof dan je saldo toelaat.</span>`]);
-  if (n(s.urenbank) < 0) uit.push(['let-op', `<span>Je urenbank staat op ${fmtTeken(n(s.urenbank))} uur: je hebt minder geschreven dan je norm.</span>`]);
-  if (n(s.verlof_vervallen) > 0) uit.push(['fout', `<span>${fmt(s.verlof_vervallen)} uur verlof is vervallen.</span>`]);
+  if (tekort) uit.push(['fout', `<span>Je plant ${fmtU(tekort.opgenomen)} uur meer verlof dan je saldo toelaat.</span>`]);
+  const ub = n(s.urenbank);
+  if (ub !== 0 && new Date().getMonth() >= 10) {
+    uit.push(['let-op', `<span>Je urenbank ${esc(s.urenbank_jaar)} staat op ${fmtTeken(ub, fmtU)} uur. Zorg dat hij op 31 december op 0 staat: ${ub > 0 ? `neem nog ${fmtU(ub)} uur vrij of schrijf minder` : `werk nog ${fmtU(-ub)} uur extra`}.</span>`]);
+  } else if (ub < 0) {
+    uit.push(['let-op', `<span>Je urenbank staat op ${fmtTeken(ub, fmtU)} uur: je hebt minder geschreven dan je norm.</span>`]);
+  }
+  const dubbel = verlof.filter(v => v.overlapt_met && v.status !== 'voorbij');
+  if (dubbel.length) uit.push(['fout', `<span>Dubbel verlof: ${dubbel.map(v => `<strong>${esc(v.omschrijving)}</strong>`).join(' en ')} vallen over elkaar heen.</span>`]);
+  if (n(s.verlof_vervallen) > 0) uit.push(['fout', `<span>${fmtU(s.verlof_vervallen)} uur verlof is vervallen.</span>`]);
   return uit;
 }
 
 /* ---------- weken ---------- */
 async function toonWeken(main, arg) {
-  const jaar = +arg || DIT_JAAR;
+  const jaar = geldigJaar(+arg || DIT_JAAR);
   const [weken, dagen, afw, inst] = await Promise.all([
     api.rpc('weekoverzicht', { p_jaar: jaar }),
     api.rpc('dagen', { van: `${jaar}-01-01`, tot: `${jaar}-12-31` }),
@@ -235,7 +270,7 @@ async function toonWeken(main, arg) {
     instellingen(),
   ]);
   const afwSet = new Set(afw.map(a => a.datum));
-  const gevuld = weken.filter(w => w.timetell_uren != null);
+  const gevuld = weken.filter(w => w.timetell_uren != null && w.van >= inst.startdatum);
   const som = k => gevuld.reduce((a, w) => a + n(w[k]), 0);
   const laatste = gevuld[gevuld.length - 1];
 
@@ -273,7 +308,7 @@ async function toonWeken(main, arg) {
 
   $$('[data-tt]', main).forEach(inp => inp.addEventListener('change', async () => {
     const weeknr = +inp.dataset.tt, v = n(inp.value);
-    const ok = await bewaar(() => (v == null
+    const ok = await bewaar(() => (v != null && controleer(v, { min: 0, max: 100, naam: 'de weekuren' }), v == null
       ? api.remove('week_uren', { jaar, weeknr })
       : api.upsert('week_uren', { jaar, weeknr, timetell_uren: v })));
     if (ok) { const y = scrollY; await toonWeken(main, jaar); scrollTo(0, y); }
@@ -299,7 +334,7 @@ async function toonWeken(main, arg) {
     knop.setAttribute('aria-expanded', 'true');
     $$('[data-dag]', rij).forEach(inp => inp.addEventListener('change', async () => {
       const v = n(inp.value) ?? 0;
-      const ok = await bewaar(() => api.upsert('dag_afwijking', { datum: inp.dataset.dag, uren: v, toelichting: 'Aangepast in weekoverzicht' }));
+      const ok = await bewaar(() => controleer(v, { min: 0, max: 24, naam: 'de uren per dag' }) != null && api.upsert('dag_afwijking', { datum: inp.dataset.dag, uren: v, toelichting: 'Aangepast in weekoverzicht' }));
       if (ok) { const y = scrollY; await toonWeken(main, jaar); scrollTo(0, y); $(`[data-open="${w.weeknr}"]`, main)?.click(); }
     }));
     $$('[data-herstel]', rij).forEach(b => b.addEventListener('click', async () => {
@@ -316,7 +351,7 @@ async function toonWeken(main, arg) {
 
 /* ---------- verlof ---------- */
 async function toonVerlof(main, arg) {
-  const jaar = +arg || DIT_JAAR;
+  const jaar = geldigJaar(+arg || DIT_JAAR);
   const alles = await api.rpc('verlof_details');
   const lijst = alles.filter(v => jaarVan(v.begin) === jaar || jaarVan(v.eind) === jaar);
   const som = b => lijst.filter(v => v.bron === b).reduce((a, v) => a + n(v.kosten_uren), 0);
@@ -352,7 +387,7 @@ function verlofItem(v) {
   const boekStatus = v.bron === 'urenbank'
     ? '<span class="muted">Niet boeken bij P&amp;O, minder schrijven in Timetell</span>'
     : v.geboekt
-      ? `<span class="chip ja">Geboekt bij P&amp;O${v.geboekte_uren != null ? `: ${fmt(v.geboekte_uren)} uur` : ''}</span>`
+      ? `<span class="chip ja">Geboekt bij P&amp;O${v.geboekte_uren != null ? `: ${fmtU(v.geboekte_uren)} uur` : ''}</span>`
       : `<span class="chip nee">Nog niet geboekt</span> <button class="knop-tekst" data-geboekt="${v.id}">Markeer als geboekt</button>`;
   return `<li class="verlof-item ${v.status}">
     <div class="kleur" style="background:${kleur}"></div>
@@ -363,10 +398,11 @@ function verlofItem(v) {
         <span>${v.werkdagen} ${v.werkdagen === 1 ? 'werkdag' : 'werkdagen'}</span>
         <span>${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij (${periode(v.vrij_van, v.vrij_tot)})</span>
       </div>
-      <div class="rij" style="gap:0.5rem"><span class="chip ${v.bron}">${v.bron === 'overig' && v.soort_overig ? esc(v.soort_overig) : BRON[v.bron]}</span>${boekStatus}</div>
+      ${v.overlapt_met ? `<p class="fout-tekst" style="margin:0">Valt over: ${esc(v.overlapt_met)}. Deze dagen tellen dubbel.</p>` : ''}
+      <div class="rij" style="gap:0.5rem"><span class="chip ${esc(v.bron)}">${v.bron === 'overig' && v.soort_overig ? esc(v.soort_overig) : BRON[v.bron]}</span>${boekStatus}</div>
     </div>
     <div class="kosten">
-      <span class="num">${fmt(v.kosten_uren)}</span><span class="muted">uur${v.uren_handmatig != null && n(v.uren_handmatig) !== n(v.berekende_uren) ? ` (rooster: ${fmt(v.berekende_uren)})` : ''}</span>
+      <span class="num">${fmtU(v.kosten_uren)}</span><span class="muted">uur${v.uren_handmatig != null && n(v.uren_handmatig) !== n(v.berekende_uren) ? ` (rooster: ${fmtU(v.berekende_uren)})` : ''}</span>
       <div><button class="knop-tekst" data-bewerk="${v.id}">Bewerken</button></div>
     </div>
   </li>`;
@@ -405,6 +441,12 @@ function verlofFormulier(v, jaar) {
   document.body.append(dlg);
   const f = $('form', dlg);
   let berekend = null;
+  let bestaand = [];
+  let dubbelBevestigd = false;
+  const overlap = () => bestaand.filter(x => x.id !== v.id && f.begin.value && f.eind.value && x.begin <= f.eind.value && x.eind >= f.begin.value);
+  const opslaanKnop = $('button[value=bewaar]', f);
+  const opslaanTekst = opslaanKnop.textContent;
+  api.list('verlof').then(r => { bestaand = r; voorvertoning(); }).catch(() => {});
 
   const zichtbaarheid = () => {
     const bron = f.bron.value;
@@ -415,12 +457,23 @@ function verlofFormulier(v, jaar) {
   const voorvertoning = async () => {
     const vv = $('#voorvertoning', f);
     if (!f.begin.value || !f.eind.value || f.eind.value < f.begin.value) { vv.textContent = 'Kies de data om te zien hoeveel uur dit kost.'; berekend = null; return; }
-    const ds = await api.rpc('dagen', { van: f.begin.value, tot: f.eind.value });
+    dubbelBevestigd = false;
+    opslaanKnop.textContent = opslaanTekst;
+    $('#formfout', f).textContent = '';
+    let ds;
+    try {
+      ds = await api.rpc('dagen', { van: f.begin.value, tot: f.eind.value });
+    } catch (e) {
+      vv.textContent = `Kosten berekenen lukt niet: ${begrijpelijk(e)}`;
+      berekend = null;
+      return;
+    }
     const werk = ds.filter(d => n(d.norm_uren) > 0);
     berekend = werk.reduce((a, d) => a + n(d.norm_uren), 0);
     const feest = ds.filter(d => d.feestdag && n(d.rooster_uren) > 0).map(d => d.feestdag);
-    vv.innerHTML = `Volgens je rooster kost dit <strong>${fmt(berekend)} uur</strong> (${werk.length} ${werk.length === 1 ? 'werkdag' : 'werkdagen'}: ${werk.map(d => `${DAGNAMEN[d.isodow - 1]} ${kort(d.datum)}`).join(', ') || 'geen'}).${feest.length ? ` Feestdag${feest.length > 1 ? 'en' : ''} op een werkdag: ${feest.map(esc).join(', ')}.` : ''}`;
-    if (f.geboekt.checked && !f.geboekte_uren.value) f.geboekte_uren.placeholder = fmt(n(f.uren_handmatig.value) ?? berekend);
+    const dubbel = overlap();
+    vv.innerHTML = `Volgens je rooster kost dit <strong>${fmtU(berekend)} uur</strong> (${werk.length} ${werk.length === 1 ? 'werkdag' : 'werkdagen'}: ${werk.map(d => `${DAGNAMEN[d.isodow - 1]} ${kort(d.datum)}`).join(', ') || 'geen'}).${feest.length ? ` Feestdag${feest.length > 1 ? 'en' : ''} op een werkdag: ${feest.map(esc).join(', ')}.` : ''}${dubbel.length ? `<p class="fout-tekst" style="margin:0.5rem 0 0">Let op: je hebt in deze periode al verlof: ${dubbel.map(x => `${esc(x.omschrijving)} (${periode(x.begin, x.eind)})`).join(', ')}. Dubbel verlof gaat twee keer van je saldo af.</p>` : ''}`;
+    if (f.geboekt.checked && !f.geboekte_uren.value) f.geboekte_uren.placeholder = fmtU(n(f.uren_handmatig.value) ?? berekend);
   };
   f.bron.addEventListener('change', zichtbaarheid);
   f.geboekt.addEventListener('change', () => {
@@ -445,6 +498,17 @@ function verlofFormulier(v, jaar) {
     if (!f.omschrijving.value.trim()) return (fout.textContent = 'Vul in waarvoor het verlof is.');
     if (!f.begin.value || !f.eind.value) return (fout.textContent = 'Vul de eerste en laatste dag in.');
     if (f.eind.value < f.begin.value) return (fout.textContent = 'De laatste dag ligt voor de eerste dag.');
+    if (jaarVan(f.begin.value) < JAAR_MIN || jaarVan(f.eind.value) > JAAR_MAX) return (fout.textContent = `Kies datums tussen ${JAAR_MIN} en ${JAAR_MAX}.`);
+    for (const [veld, naam] of [['uren_handmatig', 'het afwijkende aantal uren'], ['geboekte_uren', 'de geboekte uren']]) {
+      if (f[veld].value !== '' && (Number(f[veld].value) < 0 || Number(f[veld].value) > 2000)) return (fout.textContent = `${naam[0].toUpperCase()}${naam.slice(1)} moet tussen 0 en 2.000 liggen.`);
+    }
+    const dubbel = overlap();
+    if (dubbel.length && !dubbelBevestigd) {
+      dubbelBevestigd = true;
+      opslaanKnop.textContent = 'Toch opslaan';
+      fout.textContent = `Je staat op het punt dubbel verlof te boeken: dit valt over ${dubbel.map(x => `${x.omschrijving} (${periode(x.begin, x.eind)})`).join(', ')}. Klik nog een keer om toch op te slaan.`;
+      return;
+    }
     const bron = f.bron.value;
     const rij = {
       omschrijving: f.omschrijving.value.trim(), begin: f.begin.value, eind: f.eind.value, bron,
@@ -462,7 +526,7 @@ function verlofFormulier(v, jaar) {
 
 /* ---------- jaarkaart ---------- */
 async function toonJaar(main, arg) {
-  const jaar = +arg || DIT_JAAR;
+  const jaar = geldigJaar(+arg || DIT_JAAR);
   const dagen = await api.rpc('dagen', { van: `${jaar}-01-01`, tot: `${jaar}-12-31` });
   const verlof = await api.rpc('verlof_details');
   const status = new Map(verlof.map(v => [v.id, v]));
@@ -528,7 +592,7 @@ async function toonJaar(main, arg) {
       <div class="rij" style="gap:0.5rem;margin-top:0.35rem">
         ${d.feestdag ? `<span class="chip feest">${esc(d.feestdag)}</span>` : ''}
         ${n(d.norm_uren) > 0 ? `<span>${fmt(d.norm_uren)} uur volgens rooster</span>` : d.isodow < 6 && !d.feestdag ? '<span class="muted">Vaste vrije dag</span>' : ''}
-        ${v ? `<span class="chip ${v.bron}">${esc(v.omschrijving)}</span><span class="muted">${periode(v.begin, v.eind)}, ${fmt(v.kosten_uren)} uur, ${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij</span> <button class="knop-tekst" data-bewerk-dag="${v.id}">Bewerken</button>` : ''}
+        ${v ? `<span class="chip ${esc(v.bron)}">${esc(v.omschrijving)}</span><span class="muted">${periode(v.begin, v.eind)}, ${fmtU(v.kosten_uren)} uur, ${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij</span> <button class="knop-tekst" data-bewerk-dag="${v.id}">Bewerken</button>` : ''}
         ${d.agenda ? `<span>${esc(d.agenda)}</span>` : ''}
       </div>`;
     $('[data-bewerk-dag]')?.addEventListener('click', () => verlofFormulier(v, jaar));
@@ -649,6 +713,10 @@ async function toonInstellingen(main) {
   rf.addEventListener('submit', async e => {
     e.preventDefault();
     const rij = { geldig_vanaf: rf.vanaf.value, uren: DAGNAMEN.map((_, i) => n(rf[`d${i}`].value) || 0) };
+    try {
+      rij.uren.forEach(u => controleer(u, { min: 0, max: 24, naam: 'de uren per dag' }));
+      if (!rij.geldig_vanaf) throw new Error('Vul in vanaf wanneer het rooster geldt.');
+    } catch (err) { return melding(err.message, true); }
     const bestaand = roosters.find(r => r.geldig_vanaf === rij.geldig_vanaf);
     if (await bewaar(() => (bestaand ? api.update('rooster', { id: bestaand.id }, rij) : api.insert('rooster', rij)), 'Rooster opgeslagen')) toonInstellingen(main);
   });
@@ -657,7 +725,12 @@ async function toonInstellingen(main) {
   $$('[data-potje] [data-veld]', main).forEach(inp => inp.addEventListener('change', async () => {
     const id = +inp.closest('tr').dataset.potje, veld = inp.dataset.veld;
     let waarde = inp.value;
-    if (veld === 'uren' || veld === 'correctie') waarde = n(waarde) ?? 0;
+    if (veld === 'uren' || veld === 'correctie') {
+      waarde = n(waarde) ?? 0;
+      try {
+        controleer(waarde, veld === 'uren' ? { min: 0, max: 2000, naam: 'de uren van een potje' } : { min: -2000, max: 2000, naam: 'de correctie' });
+      } catch (err) { melding(err.message, true); return toonInstellingen(main); }
+    }
     if (veld === 'vervalt_op' || veld === 'toelichting') waarde = waarde || null;
     if (await bewaar(() => api.update('verlof_potje', { id }, { [veld]: waarde }))) toonInstellingen(main);
   }));
@@ -709,6 +782,15 @@ async function toonInstellingen(main) {
   $('#inst-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target;
+    try {
+      controleer(n(f.uren_per_dag.value), { min: 1, max: 24, naam: 'uren per werkdag' });
+      controleer(n(f.uren_per_week.value), { min: 1, max: 60, naam: 'uren per week' });
+      controleer(n(f.urenbank_startsaldo.value) ?? 0, { min: -500, max: 500, naam: 'de urenbank op de startdatum' });
+      controleer(n(f.verval_wettelijk_maanden.value), { min: 0, max: 120, naam: 'de vervaltermijn wettelijk', heel: true });
+      controleer(n(f.verval_bovenwettelijk_maanden.value), { min: 0, max: 120, naam: 'de vervaltermijn bovenwettelijk', heel: true });
+      controleer(n(f.waarschuw_dagen.value), { min: 0, max: 730, naam: 'waarschuw vooraf', heel: true });
+      if (!f.startdatum.value) throw new Error('Vul een startdatum in.');
+    } catch (err) { return melding(err.message, true); }
     const rij = {
       startdatum: f.startdatum.value, urenbank_startsaldo: n(f.urenbank_startsaldo.value) ?? 0,
       uren_per_dag: n(f.uren_per_dag.value) || 9, uren_per_week: n(f.uren_per_week.value) || 36,
@@ -718,7 +800,12 @@ async function toonInstellingen(main) {
     if (await bewaar(() => api.upsert('instellingen', rij), 'Rekenregels opgeslagen')) { instellingenCache = null; toonInstellingen(main); }
   });
 
-  $('#uitloggen').addEventListener('click', async () => { await api.signOut(); location.hash = ''; start(); });
+  $('#uitloggen').addEventListener('click', async () => {
+    try { await api.signOut(); } catch (e) { return melding(begrijpelijk(e), true); }
+    instellingenCache = null;
+    location.hash = '';
+    start();
+  });
 }
 
 function potjeFormulier(p, main) {
@@ -742,7 +829,7 @@ function potjeFormulier(p, main) {
   f.addEventListener('submit', async e => {
     e.preventDefault();
     const uren = n(f.uren.value);
-    if (uren == null || uren <= 0) return melding('Vul het aantal uren in.', true);
+    if (uren == null || uren <= 0 || uren > 2000) return melding('Vul een aantal uren tussen 0 en 2.000 in.', true);
     if (f.soort.value === 'gekocht' && uren > 187) melding('Let op: meer dan 187 uur kopen staat de cao niet toe.', true);
     const rij = { soort: f.soort.value, opbouwjaar: +f.opbouwjaar.value, uren, beschikbaar_vanaf: f.beschikbaar_vanaf.value, prioriteit: p.prioriteit, toelichting: f.toelichting.value.trim() || null, correctie: 0 };
     if (await bewaar(() => api.insert('verlof_potje', rij), 'Potje toegevoegd')) { sluit(); toonInstellingen(main); }
@@ -763,15 +850,6 @@ function toonLogin(bericht = '') {
         <p class="info" id="link-info" role="status" style="margin:0">${esc(bericht)}</p>
         <button class="knop">Stuur inloglink</button>
       </form>
-      <details style="margin-top:1.5rem">
-        <summary class="knop-tekst" style="display:inline">Inloggen met wachtwoord</summary>
-        <form id="login-form">
-          <label class="veld"><span>E-mailadres</span><input type="email" name="email" autocomplete="username" required></label>
-          <label class="veld"><span>Wachtwoord</span><input type="password" name="wachtwoord" autocomplete="current-password" required></label>
-          <p class="fout-tekst" id="login-fout" role="alert"></p>
-          <button class="knop licht">Inloggen</button>
-        </form>
-      </details>
       <p class="info" style="margin-top:1.5rem">Eerst rondkijken? <a href="?demo">Bekijk de demo met voorbeelddata</a>.</p>
     </div>`;
   const lf = $('#link-form');
@@ -784,71 +862,31 @@ function toonLogin(bericht = '') {
       await api.sendLoginLink(email);
       $('#link-info').textContent = `Er staat een mail met een inloglink in ${email}. Open de link op dit apparaat; je blijft daarna ingelogd.`;
     } catch (err) {
-      $('#link-fout').textContent = err.message;
-    } finally {
-      knop.disabled = false;
-    }
-  });
-  const f = $('#login-form');
-  f.addEventListener('submit', async e => {
-    e.preventDefault();
-    const knop = $('button', f);
-    knop.disabled = true;
-    $('#login-fout').textContent = '';
-    try {
-      await api.signIn(f.email.value.trim(), f.wachtwoord.value);
-      await api.session();
-      await start();
-    } catch (err) {
-      $('#login-fout').textContent = err.message;
+      $('#link-fout').textContent = begrijpelijk(err);
     } finally {
       knop.disabled = false;
     }
   });
 }
 
-function toonNieuwWachtwoord() {
-  $('#app').innerHTML = `
-    <div class="login">
-      <p class="merk">Uren<span>bank</span></p>
-      <p class="muted">Kies een nieuw wachtwoord voor ${esc(api.email() || 'je account')}.</p>
-      <form id="ww-form">
-        <label class="veld"><span>Nieuw wachtwoord</span><input type="password" name="ww1" autocomplete="new-password" minlength="6" required></label>
-        <label class="veld"><span>Herhaal wachtwoord</span><input type="password" name="ww2" autocomplete="new-password" minlength="6" required></label>
-        <p class="fout-tekst" id="ww-fout" role="alert"></p>
-        <button class="knop">Wachtwoord opslaan</button>
-      </form>
-    </div>`;
-  $('#ww-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const f = e.target;
-    if (f.ww1.value.length < 6) return ($('#ww-fout').textContent = 'Kies een wachtwoord van minimaal 6 tekens.');
-    if (f.ww1.value !== f.ww2.value) return ($('#ww-fout').textContent = 'De twee wachtwoorden zijn niet gelijk.');
-    try {
-      await api.setPassword(f.ww1.value);
-      history.replaceState(null, '', location.pathname);
-      melding('Wachtwoord opgeslagen');
-      start();
-    } catch (err) {
-      $('#ww-fout').textContent = err.message;
-    }
-  });
-}
-
-let herstelModus = api.herstelLink();
 api.onAuth((sessie, gebeurtenis) => {
-  if (gebeurtenis === 'PASSWORD_RECOVERY') { herstelModus = true; toonNieuwWachtwoord(); }
-  else if (gebeurtenis === 'SIGNED_IN' && sessie && !$('#inhoud')) { history.replaceState(null, '', location.pathname + location.search); start(); }
+  if (gebeurtenis === 'SIGNED_IN' && sessie && !$('#inhoud')) { history.replaceState(null, '', location.pathname + location.search); start(); }
 });
 
 async function start() {
-  const sessie = await api.session();
-  if (herstelModus && sessie) { herstelModus = false; return toonNieuwWachtwoord(); }
+  let sessie;
+  try {
+    sessie = await api.session();
+  } catch (e) {
+    return toonLogin(begrijpelijk(e));
+  }
   if (!sessie) return toonLogin();
   skelet();
   router();
 }
 
 window.addEventListener('hashchange', () => { if ($('#inhoud')) router(); });
+// Fouten die nergens anders worden opgevangen (bijvoorbeeld bij het verversen na opslaan)
+window.addEventListener('unhandledrejection', e => { console.error(e.reason); melding(begrijpelijk(e.reason), true); });
 if ('serviceWorker' in navigator && !api.demo) navigator.serviceWorker.register('sw.js').catch(() => {});
 start();

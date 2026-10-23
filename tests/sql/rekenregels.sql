@@ -21,13 +21,13 @@ values ('00000000-0000-0000-0000-0000000000a1', 'test-urenbank@voorbeeld.invalid
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
 
--- Opzet: 4x9 (ma, di, do, vr), wettelijk 144 + bovenwettelijk 57,6
+-- Opzet: 4x9 (ma, di, do, vr), vijf potjes. Alle getallen zijn verzonnen testwaarden.
 insert into urenbank.instellingen (startdatum, uren_per_dag, uren_per_week) values ('2026-01-01', 9, 36);
 insert into urenbank.rooster (geldig_vanaf, uren) values ('2024-01-01', '{9,9,0,9,9,0,0}');
 insert into urenbank.verlof_potje (soort, opbouwjaar, uren, beschikbaar_vanaf, prioriteit) values
-  ('bovenwettelijk', 2024, 8.38, '2024-01-01', 1),
+  ('bovenwettelijk', 2024, 10, '2024-01-01', 1),
   ('wettelijk', 2026, 144, '2026-01-01', 2),
-  ('gekocht', 2025, 36, '2025-01-01', 3),
+  ('gekocht', 2025, 40, '2025-01-01', 3),
   ('bovenwettelijk', 2025, 57.6, '2025-01-01', 4),
   ('bovenwettelijk', 2026, 57.6, '2026-01-01', 5);
 
@@ -51,6 +51,12 @@ select pg_temp.verwacht('Norm week 14 (Goede Vrijdag werkdag)', 36::numeric, (se
 select pg_temp.verwacht('Norm week 19 (5 mei op dinsdag)', 27::numeric, (select norm_uren from urenbank.weekoverzicht(2026) where weeknr = 19));
 select pg_temp.verwacht('Norm week 52 (kerst op vrijdag)', 27::numeric, (select norm_uren from urenbank.weekoverzicht(2026) where weeknr = 52));
 select pg_temp.verwacht('Norm week 53 (ma, di, do)', 27::numeric, (select norm_uren from urenbank.weekoverzicht(2026) where weeknr = 53));
+do $$ begin
+  perform urenbank.weekoverzicht(9999);
+  raise exception 'ROOD: Onzinnig jaartal wordt geweigerd — geen fout gekregen';
+exception when others then
+  if sqlerrm like 'ROOD:%' then raise; end if;
+end $$;
 
 -- Dag schuiven: woensdag werken, donderdag vrij
 insert into urenbank.dag_afwijking (datum, uren) values ('2026-06-10', 9), ('2026-06-11', 0);
@@ -65,6 +71,11 @@ delete from urenbank.feestdag_afwijking;
 -- Urenbank: Timetell - norm, cumulatief
 insert into urenbank.week_uren (jaar, weeknr, timetell_uren) values (2026, 1, 9), (2026, 2, 44), (2026, 3, 30);
 select pg_temp.verwacht('Urenbank na week 3', 2::numeric, (select urenbank_cumulatief from urenbank.weekoverzicht(2026) where weeknr = 3));
+insert into urenbank.week_uren (jaar, weeknr, timetell_uren) values (2027, 2, 40);
+select pg_temp.verwacht('Urenbank 2027 begint op 0 (week 2: +4)', 4::numeric, (select urenbank_cumulatief from urenbank.weekoverzicht(2027) where weeknr = 2));
+select pg_temp.verwacht('Samenvatting 2026 toont urenbank 2026', 2::numeric, (urenbank.samenvatting('2026-10-23')->>'urenbank')::numeric);
+select pg_temp.verwacht('Samenvatting 2027 toont urenbank 2027', 4::numeric, (urenbank.samenvatting('2027-01-11')->>'urenbank')::numeric);
+delete from urenbank.week_uren where jaar = 2027;
 
 -- Verlof: kosten en aaneengesloten vrij
 insert into urenbank.verlof (begin, eind, omschrijving, bron, geboekt, geboekte_uren) values
@@ -76,20 +87,33 @@ select pg_temp.verwacht('Kerst: 4 werkdagen', 4, (select werkdagen from urenbank
 select pg_temp.verwacht('Kerst: 12 dagen aaneengesloten vrij', 12, (select dagen_aansluitend_vrij from urenbank.verlof_details() where omschrijving = 'Kerst'));
 select pg_temp.verwacht('Wo-za: 5 dagen vrij tot en met zondag', 5, (select dagen_aansluitend_vrij from urenbank.verlof_details() where omschrijving = 'Weekje weg'));
 select pg_temp.verwacht('Zomer 6 jul - 2 aug kost 144 uur', 144::numeric, (select kosten_uren from urenbank.verlof_details() where omschrijving = 'Zomer'));
+select pg_temp.verwacht('Geen overlap zonder dubbel verlof', null::text, (select overlapt_met from urenbank.verlof_details() where omschrijving = 'Kerst'));
+insert into urenbank.verlof (begin, eind, omschrijving, bron) values ('2026-12-30', '2027-01-02', 'Oud en nieuw', 'saldo');
+select pg_temp.verwacht('Overlap wordt gemeld', 'Oud en nieuw', (select overlapt_met from urenbank.verlof_details() where omschrijving = 'Kerst'));
+select pg_temp.verwacht('Overlap wordt aan beide kanten gemeld', 'Kerst', (select overlapt_met from urenbank.verlof_details() where omschrijving = 'Oud en nieuw'));
+delete from urenbank.verlof where omschrijving = 'Oud en nieuw';
 
 -- Saldo: alleen geboekt verlof gaat eraf; urenbank-verlof nooit; volgorde = prioriteit
-select pg_temp.verwacht('Saldo nu (alleen geboekt)', 159.58::numeric, (select sum(rest) from urenbank.potje_saldi(false)));
+select pg_temp.verwacht('Saldo nu (alleen geboekt)', 165.2::numeric, (select sum(rest) from urenbank.potje_saldi(false) where soort <> 'tekort'));
 select pg_temp.verwacht('Eerst bovenwettelijk 2024 op', 0::numeric, (select rest from urenbank.potje_saldi(false) where opbouwjaar = 2024));
-select pg_temp.verwacht('Daarna wettelijk 2026', 8.38::numeric, (select rest from urenbank.potje_saldi(false) where soort = 'wettelijk'));
-select pg_temp.verwacht('Saldo na planning (kerst erbij)', 123.58::numeric, (select sum(rest) from urenbank.potje_saldi(true)));
-select pg_temp.verwacht('Samenvatting: totaal = saldo + urenbank', 161.58::numeric, (urenbank.samenvatting()->>'totaal')::numeric);
+select pg_temp.verwacht('Daarna wettelijk 2026', 10::numeric, (select rest from urenbank.potje_saldi(false) where soort = 'wettelijk' and opbouwjaar = 2026));
+select pg_temp.verwacht('Saldo na planning (kerst erbij)', 129.2::numeric, (select sum(rest) from urenbank.potje_saldi(true)));
+select pg_temp.verwacht('Samenvatting: totaal = saldo + urenbank', 167.2::numeric, (urenbank.samenvatting('2026-10-23')->>'totaal')::numeric);
+
+-- Potjes van volgend jaar tellen pas mee vanaf hun eerste dag
+select urenbank.nieuw_jaar(2027);
+select pg_temp.verwacht('Potjes 2027 tellen in 2026 niet mee', 165.2::numeric, (urenbank.samenvatting('2026-10-23')->>'verlof_saldo')::numeric);
+select pg_temp.verwacht('Potjes 2027 tellen vanaf 1 januari 2027 mee', 366.8::numeric, (urenbank.samenvatting('2027-01-11')->>'verlof_saldo')::numeric);
 
 -- Verval: wettelijk 12 maanden, bovenwettelijk 60 maanden na het opbouwjaar
-select pg_temp.verwacht('Wettelijk 2026 vervalt eind 2027', '2027-12-31'::date, (select vervalt_op from urenbank.potje_saldi(false) where soort = 'wettelijk'));
+select pg_temp.verwacht('Wettelijk 2026 vervalt eind 2027', '2027-12-31'::date, (select vervalt_op from urenbank.potje_saldi(false) where soort = 'wettelijk' and opbouwjaar = 2026));
 select pg_temp.verwacht('Bovenwettelijk 2024 vervalt eind 2029', '2029-12-31'::date, (select vervalt_op from urenbank.potje_saldi(false) where opbouwjaar = 2024));
+update urenbank.instellingen set verval_wettelijk_maanden = 6;
+select pg_temp.verwacht('Bij 6 maanden vervalt wettelijk 2026 op 30 juni 2027', '2027-06-30'::date, (select vervalt_op from urenbank.potje_saldi(false) where soort = 'wettelijk' and opbouwjaar = 2026));
+update urenbank.instellingen set verval_wettelijk_maanden = 12;
 
 -- Tekort wordt zichtbaar in plaats van stil weggeslikt
-insert into urenbank.verlof (begin, eind, omschrijving, bron, geboekt, geboekte_uren) values ('2026-09-01', '2026-09-01', 'Te veel', 'saldo', true, 500);
+insert into urenbank.verlof (begin, eind, omschrijving, bron, geboekt, geboekte_uren) values ('2026-09-01', '2026-09-01', 'Te veel', 'saldo', true, 900);
 select pg_temp.verwacht('Tekort bij te veel verlof', true, exists (select 1 from urenbank.potje_saldi(false) where soort = 'tekort'));
 
 -- Rijbeveiliging: een andere gebruiker ziet niets

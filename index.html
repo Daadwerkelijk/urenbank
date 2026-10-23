@@ -19,5 +19,23 @@
 <body>
   <div id="app"><p class="laden" style="text-align:center">Urenbank laden…</p></div>
   <script type="module" src="js/app.js"></script>
+  <script>
+    // Laat een melding zien als de app na 15 seconden nog niet geladen is (bijvoorbeeld zonder internet)
+    function urenbankLaadfout(tekst) {
+      var app = document.getElementById('app');
+      if (app && app.querySelector('.laden') && !document.getElementById('inhoud')) {
+        app.innerHTML = '<div class="login"><p class="merk">Uren<span>bank</span></p><p id="laadfout"></p>' +
+          '<button class="knop" onclick="location.reload()">Opnieuw proberen</button></div>';
+        document.getElementById('laadfout').textContent = tekst;
+      }
+    }
+    window.addEventListener('error', function (e) {
+      if (e.filename && /\/js\//.test(e.filename)) urenbankLaadfout('De app kon niet starten. Controleer je internet en probeer het opnieuw.');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      urenbankLaadfout((e.reason && e.reason.message) || 'De app kon niet starten. Controleer je internet en probeer het opnieuw.');
+    });
+    setTimeout(function () { urenbankLaadfout('Het laden duurt erg lang. Controleer je internet en probeer het opnieuw.'); }, 15000);
+  </script>
 </body>
 </html>

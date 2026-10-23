@@ -33,8 +33,17 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   1 mei: onbekend of de gebruiker die keuzedag heeft; behandeld als
   werkdag.
 - **KPE/werksessies**: alleen info in de planning, geen effect op uren.
-- **Controlepunt 23-10-2026**: app = P&O = 134,57 uur verlof + 2 uur
-  urenbank. Na geplande kerst (36 uur): 98,57 verlof.
+- **Controlepunt 23-10-2026**: de app kwam per potje tot op de honderdste
+  overeen met het P&O-overzicht ("Mijn saldo"). Bij een nieuw verschil:
+  vergelijk per potje begin, opgenomen en rest (skill `p-en-o`). Echte
+  saldi staan niet in de repo (die is openbaar).
+- **Urenbank per kalenderjaar**: begint elk jaar op 0 en gaat niet mee
+  naar het nieuwe jaar. De gebruiker zorgt zelf dat hij op 31 december op
+  0 staat; de app waarschuwt in november en december.
+- **Potjes** tellen pas mee en zijn pas zichtbaar op het overzicht vanaf
+  "beschikbaar vanaf" (potjes van volgend jaar dus vanaf 1 januari).
+- **Dubbel verlof**: bij opslaan een waarschuwing ("Toch opslaan"); op de
+  verlofpagina en bij "Let op" blijft overlap zichtbaar.
 
 ## Structuur
 - `index.html` — schil; laadt `css/app.css` en `js/app.js`
@@ -50,9 +59,12 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
 - `sw.js` — service worker (netwerk eerst); `CACHE` ophogen bij elke
   wijziging aan app-bestanden
 - `manifest.webmanifest`, `icons/` — PWA
-- `supabase/migrations/` — `001` schema + RLS, `002` rekenfuncties.
-  Nieuwe wijzigingen altijd in een nieuw genummerd bestand.
-- `tests/sql/rekenregels.sql` — rekenregeltests (transactie + rollback)
+- `supabase/migrations/` — `001` schema + RLS, `002` rekenfuncties,
+  `003` urenbank per jaar, potjes vanaf beschikbaar, overlap, jaarbereik
+  2000–2100. Nieuwe wijzigingen altijd in een nieuw genummerd bestand.
+- `tests/sql/rekenregels.sql` — rekenregeltests (transactie + rollback,
+  verzonnen getallen). Draaien via de Supabase SQL Editor: via de MCP
+  vraagt het om een bevestiging die vaak wordt geannuleerd.
 - `tests/demo-gelijkloop.mjs` — zelfde scenario tegen `js/demo.js` (Node)
 - `tests/rooktest.md` — kernflows om af te vinken
 

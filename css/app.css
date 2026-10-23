@@ -286,3 +286,10 @@ dialog form { padding: 1.25rem; display: grid; gap: 1rem; }
   .weken-tabel .alleen-mobiel { overflow-wrap: anywhere; hyphens: auto; }
 }
 .week-dag .chip { white-space: normal; overflow-wrap: anywhere; }
+
+/* Telefoon rechtop: roosterdagen passen naast elkaar, lange teksten breken af */
+.rooster-dagen { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
+.rooster-dagen input { width: 100%; min-width: 0; }
+.plan li, .verlof-item h3, .verlof-item .inhoud, .signalen li, .dag-info, .fout-tekst, .voorvertoning { overflow-wrap: anywhere; }
+.verlof-item .inhoud { min-width: 0; }
+.velden { grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr)); }

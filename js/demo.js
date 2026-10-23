@@ -7,6 +7,7 @@ const fromIso = s => { const [y, m, d] = s.split('-').map(Number); return new Da
 const addDays = (s, n) => { const d = fromIso(s); d.setUTCDate(d.getUTCDate() + n); return toIso(d); };
 const isodow = s => ((fromIso(s).getUTCDay() + 6) % 7) + 1;
 const diffDays = (a, b) => Math.round((fromIso(b) - fromIso(a)) / 86400000);
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const r2 = n => Math.round(n * 100) / 100;
 
 const JAAR = new Date().getFullYear();
@@ -87,12 +88,16 @@ function weken(j) {
 }
 
 function weekoverzicht({ p_jaar = null } = {}) {
+  if (p_jaar != null && (p_jaar < 2000 || p_jaar > 2100)) throw new Error('Kies een jaar tussen 2000 en 2100.');
   const inst = store.instellingen[0];
-  const vanJaar = +inst.startdatum.slice(0, 4);
-  const totJaar = Math.max(JAAR, p_jaar || 0, ...store.week_uren.map(w => w.jaar));
+  const startJaar = +inst.startdatum.slice(0, 4);
+  const vanJaar = Math.max(startJaar, 2000);
+  const totJaar = Math.min(Math.max(JAAR, p_jaar || 0, ...store.week_uren.map(w => w.jaar)), 2100);
   const rows = [];
-  let cum = Number(inst.urenbank_startsaldo);
   for (let j = vanJaar; j <= totJaar; j++) {
+    if (p_jaar != null && j !== p_jaar) continue;
+    // Urenbank per kalenderjaar: elk jaar begint op 0, het startsaldo telt alleen in het startjaar
+    let cum = j === startJaar ? Number(inst.urenbank_startsaldo) : 0;
     const dg = dagen({ van: `${j}-01-01`, tot: `${j}-12-31` });
     for (const w of weken(j)) {
       const ds = dg.filter(d => d.datum >= w.van && d.datum <= w.tot);
@@ -106,7 +111,7 @@ function weekoverzicht({ p_jaar = null } = {}) {
         feestdagen: uniq('feestdag'), verlof: uniq('verlof_omschrijving'), agenda: uniq('agenda'), notitie: wu?.notitie ?? null });
     }
   }
-  return p_jaar ? rows.filter(r => r.jaar === p_jaar) : rows;
+  return rows;
 }
 
 function verlofDetails() {
@@ -115,7 +120,7 @@ function verlofDetails() {
   const hi = addDays(store.verlof.reduce((m, v) => v.eind > m ? v.eind : m, '0000'), 31);
   const dg = dagen({ van: lo, tot: hi });
   const vrij = new Set(dg.filter(d => d.norm_uren === 0 || d.verlof_id != null).map(d => d.datum));
-  const vandaag = toIso(new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())));
+  const vandaag = iso(new Date());
   return [...store.verlof].sort((a, b) => a.begin.localeCompare(b.begin) || a.id - b.id).map(v => {
     const ds = dg.filter(d => d.datum >= v.begin && d.datum <= v.eind);
     const uren = ds.reduce((s, d) => s + d.norm_uren, 0);
@@ -126,7 +131,9 @@ function verlofDetails() {
     return { ...v, werkdagen: ds.filter(d => d.norm_uren > 0).length, berekende_uren: uren, kosten_uren: kosten,
       verschil_geboekt: v.geboekt && v.geboekte_uren != null ? r2(v.geboekte_uren - kosten) : null,
       vrij_van: van, vrij_tot: tot, dagen_aansluitend_vrij: diffDays(van, tot) + 1,
-      status: v.eind < vandaag ? 'voorbij' : v.begin <= vandaag ? 'lopend' : 'gepland' };
+      status: v.eind < vandaag ? 'voorbij' : v.begin <= vandaag ? 'lopend' : 'gepland',
+      overlapt_met: store.verlof.filter(a => a.id !== v.id && a.begin <= v.eind && a.eind >= v.begin)
+        .sort((x, y) => x.begin.localeCompare(y.begin)).map(a => a.omschrijving).join(', ') || null };
   });
 }
 
@@ -134,7 +141,8 @@ function potjeSaldi({ incl_gepland = false } = {}) {
   const inst = store.instellingen[0];
   const potjes = [...store.verlof_potje].sort((a, b) => a.prioriteit - b.prioriteit || a.id - b.id).map(p => {
     const mnd = p.soort === 'wettelijk' ? inst.verval_wettelijk_maanden : inst.verval_bovenwettelijk_maanden;
-    const verv = p.vervalt_op || toIso(new Date(Date.UTC(p.opbouwjaar + Math.floor(mnd / 12), 11 + (mnd % 12), 31)));
+    // 31 december + n maanden, met de laatste dag van de maand (zoals Postgres): dag 0 van de maand erna
+    const verv = p.vervalt_op || toIso(new Date(Date.UTC(p.opbouwjaar, 12 + Number(mnd), 0)));
     const begin = Number(p.uren) + Number(p.correctie);
     return { potje_id: p.id, soort: p.soort, opbouwjaar: p.opbouwjaar, begin_uren: begin, opgenomen: 0, rest: begin,
       beschikbaar_vanaf: p.beschikbaar_vanaf, vervalt_op: verv, prioriteit: p.prioriteit };
@@ -156,22 +164,27 @@ function potjeSaldi({ incl_gepland = false } = {}) {
   return potjes;
 }
 
-function samenvatting() {
+function samenvatting({ p_peildatum = null } = {}) {
   const inst = store.instellingen[0];
-  const vandaag = new Date().toISOString().slice(0, 10);
-  const geldig = p => (p.vervalt_op ?? '9999-12-31') >= vandaag;
+  const peil = p_peildatum || iso(new Date());
+  const jaar = +peil.slice(0, 4);
+  const geldig = p => p.soort !== 'tekort' && p.beschikbaar_vanaf <= peil && (p.vervalt_op ?? '9999-12-31') >= peil;
+  const tekortVan = lijst => r2(lijst.filter(p => p.soort === 'tekort').reduce((s, p) => s - p.rest, 0));
   const nu = potjeSaldi({ incl_gepland: false });
   const plan = potjeSaldi({ incl_gepland: true });
   const saldo = r2(nu.filter(geldig).reduce((s, p) => s + p.rest, 0));
   const planSaldo = r2(plan.filter(geldig).reduce((s, p) => s + p.rest, 0));
-  const wk = weekoverzicht().filter(w => w.timetell_uren != null);
+  const tekort = tekortVan(nu), planTekort = tekortVan(plan);
+  const wk = weekoverzicht({ p_jaar: jaar }).filter(w => w.timetell_uren != null);
   const ub = wk.length ? wk[wk.length - 1].urenbank_cumulatief : 0;
   const ingevuld = wk.length ? wk[wk.length - 1].tot : null;
-  const ubPlan = verlofDetails().filter(v => v.bron === 'urenbank' && v.begin > (ingevuld || vandaag))
+  const ubPlan = verlofDetails().filter(v => v.bron === 'urenbank' && v.begin > (ingevuld || peil) && +v.begin.slice(0, 4) === jaar)
     .reduce((s, v) => s + v.kosten_uren, 0);
-  return { verlof_saldo: saldo, verlof_vervallen: r2(nu.filter(p => !geldig(p) && p.rest > 0).reduce((s, p) => s + p.rest, 0)),
-    verlof_gepland: r2(saldo - planSaldo), verlof_saldo_na_planning: planSaldo, urenbank: ub, urenbank_gepland: ubPlan,
-    urenbank_na_planning: r2(ub - ubPlan), totaal: r2(saldo + ub), totaal_na_planning: r2(planSaldo + ub - ubPlan),
+  return { peildatum: peil, urenbank_jaar: jaar, verlof_saldo: saldo,
+    verlof_vervallen: r2(nu.filter(p => p.soort !== 'tekort' && p.vervalt_op < peil && p.rest > 0).reduce((s, p) => s + p.rest, 0)),
+    verlof_tekort: tekort, verlof_gepland: r2(saldo - planSaldo + planTekort - tekort), verlof_saldo_na_planning: r2(planSaldo - planTekort),
+    urenbank: ub, urenbank_gepland: ubPlan, urenbank_na_planning: r2(ub - ubPlan),
+    totaal: r2(saldo - tekort + ub), totaal_na_planning: r2(planSaldo - planTekort + ub - ubPlan),
     weken_ingevuld_tot: ingevuld, uren_per_dag: inst.uren_per_dag, uren_per_week: inst.uren_per_week };
 }
 
@@ -187,7 +200,7 @@ function nieuwJaar({ p_jaar }) {
 
 // Voorbeeld-weekuren tot vorige week
 (() => {
-  const vandaag = new Date().toISOString().slice(0, 10);
+  const vandaag = iso(new Date());
   const patroon = [0, 2, 4, 0, -2, 0, 6, 0, 2, -4];
   const wk = weken(JAAR);
   const dg = dagen({ van: `${JAAR}-01-01`, tot: `${JAAR}-12-31` });
@@ -209,12 +222,8 @@ export const demoApi = {
   onAuth() {},
   uid: () => 'demo',
   email: () => 'demo@voorbeeld.nl',
-  async signIn() {},
   async signOut() { location.search = ''; },
-  async resetPassword() {},
   async sendLoginLink() {},
-  async setPassword() {},
-  herstelLink: () => false,
   async rpc(fn, args = {}) {
     const f = { dagen, weekoverzicht, verlof_details: verlofDetails, potje_saldi: potjeSaldi, samenvatting, nieuw_jaar: nieuwJaar }[fn];
     if (!f) throw new Error(`Onbekende functie ${fn}`);
