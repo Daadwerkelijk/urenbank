@@ -1,18 +1,13 @@
--- Urenbank 003
+-- Urenbank 004
 -- 1. Urenbank per kalenderjaar: begint elk jaar op 0 (startsaldo alleen in het startjaar).
--- 2. Verlofpotjes tellen in de samenvatting pas mee vanaf "beschikbaar vanaf" (peildatum instelbaar voor tests).
--- 3. verlof_details meldt overlappend verlof (overlapt_met).
--- 4. Onzinnige jaartallen worden geweigerd (alleen 2000 t/m 2100), ook als opbouwjaar van een potje.
--- Herhaalbaar: kan opnieuw worden uitgevoerd als een eerdere poging halverwege stopte.
-
-do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'week_uren_jaar_redelijk') then
-    alter table urenbank.week_uren add constraint week_uren_jaar_redelijk check (jaar between 2000 and 2100);
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'verlof_potje_opbouwjaar_redelijk') then
-    alter table urenbank.verlof_potje add constraint verlof_potje_opbouwjaar_redelijk check (opbouwjaar between 2000 and 2100);
-  end if;
-end $$;
+-- 2. Samenvatting met peildatum: potjes tellen pas mee vanaf "beschikbaar vanaf".
+-- 3. Verlofoverzicht meldt overlappend verlof (overlapt_met).
+-- 4. Onzinnige jaartallen worden geweigerd in het weekoverzicht.
+--
+-- Regel voor migraties in dit project: nooit iets verwijderen (geen drop).
+-- Verandert de vorm van een functie, dan krijgt de nieuwe versie een nieuwe naam
+-- en wordt de oude een doorgeefluik naar de nieuwe. Zo kan Claude migraties zelf
+-- uitvoeren zonder bevestiging, en blijven oudere app-versies werken.
 
 create or replace function urenbank.weekoverzicht(p_jaar int default null)
 returns table (jaar int, weeknr int, van date, tot date, norm_uren numeric, timetell_uren numeric,
@@ -63,8 +58,8 @@ begin
   order by cum.van;
 end $$;
 
-drop function if exists urenbank.verlof_details();
-create or replace function urenbank.verlof_details()
+-- Nieuw: verlof met overlap (vervangt verlof_details in de app)
+create or replace function urenbank.verlof_overzicht()
 returns table (id bigint, begin date, eind date, omschrijving text, bron text, soort_overig text,
                werkdagen int, berekende_uren numeric, kosten_uren numeric, uren_handmatig numeric,
                geboekt boolean, geboekte_uren numeric, verschil_geboekt numeric,
@@ -97,9 +92,21 @@ language sql stable set search_path = '' as $$
   order by vl.begin, vl.id
 $$;
 
-drop function if exists urenbank.samenvatting();
-drop function if exists urenbank.samenvatting(date);
-create or replace function urenbank.samenvatting(p_peildatum date default current_date)
+-- Oud: verlof_details blijft bestaan met dezelfde kolommen, maar leest uit verlof_overzicht
+create or replace function urenbank.verlof_details()
+returns table (id bigint, begin date, eind date, omschrijving text, bron text, soort_overig text,
+               werkdagen int, berekende_uren numeric, kosten_uren numeric, uren_handmatig numeric,
+               geboekt boolean, geboekte_uren numeric, verschil_geboekt numeric,
+               vrij_van date, vrij_tot date, dagen_aansluitend_vrij int, status text)
+language sql stable set search_path = '' as $$
+  select o.id, o.begin, o.eind, o.omschrijving, o.bron, o.soort_overig, o.werkdagen, o.berekende_uren,
+         o.kosten_uren, o.uren_handmatig, o.geboekt, o.geboekte_uren, o.verschil_geboekt,
+         o.vrij_van, o.vrij_tot, o.dagen_aansluitend_vrij, o.status
+  from urenbank.verlof_overzicht() o
+$$;
+
+-- Nieuw: samenvatting op een peildatum
+create or replace function urenbank.samenvatting(p_peildatum date)
 returns jsonb language sql stable set search_path = '' as $$
   with inst as (
     select coalesce(max(i.uren_per_dag), 9) as upd, coalesce(max(i.uren_per_week), 36) as upw
@@ -126,7 +133,7 @@ returns jsonb language sql stable set search_path = '' as $$
   ),
   ubplan as (
     select coalesce(sum(vd.kosten_uren), 0) as uren
-    from urenbank.verlof_details() vd, ub, pj
+    from urenbank.verlof_overzicht() vd, ub, pj
     where vd.bron = 'urenbank'
       and vd.begin > coalesce(ub.ingevuld_tot, p_peildatum)
       and extract(year from vd.begin)::int = pj.jaar
@@ -148,6 +155,12 @@ returns jsonb language sql stable set search_path = '' as $$
     'uren_per_dag', inst.upd,
     'uren_per_week', inst.upw)
   from nu, plan, ub, ubplan, inst, pj
+$$;
+
+-- Oud: samenvatting zonder argument = samenvatting van vandaag
+create or replace function urenbank.samenvatting()
+returns jsonb language sql stable set search_path = '' as $$
+  select urenbank.samenvatting(current_date)
 $$;
 
 revoke all on all functions in schema urenbank from public, anon;

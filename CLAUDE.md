@@ -60,11 +60,11 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   wijziging aan app-bestanden
 - `manifest.webmanifest`, `icons/` — PWA
 - `supabase/migrations/` — `001` schema + RLS, `002` rekenfuncties,
-  `003` urenbank per jaar, potjes vanaf beschikbaar, overlap, jaarbereik
-  2000–2100. Nieuwe wijzigingen altijd in een nieuw genummerd bestand.
+  `003` jaarcontroles (2000–2100), `004` urenbank per jaar, samenvatting
+  met peildatum, `verlof_overzicht` (met overlap). Nieuwe wijzigingen
+  altijd in een nieuw genummerd bestand.
 - `tests/sql/rekenregels.sql` — rekenregeltests (transactie + rollback,
-  verzonnen getallen). Draaien via de Supabase SQL Editor: via de MCP
-  vraagt het om een bevestiging die vaak wordt geannuleerd.
+  verzonnen getallen). Claude draait ze zelf via `execute_sql`.
 - `tests/demo-gelijkloop.mjs` — zelfde scenario tegen `js/demo.js` (Node)
 - `tests/rooktest.md` — kernflows om af te vinken
 
@@ -84,6 +84,28 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   Authentication → URL Configuration staan.
 - Auth-instellingen gelden voor het hele project: wijzigingen daaraan
   altijd eerst met de gebruiker bespreken.
+
+### Database-wijzigingen zelf uitvoeren (afspraak 23-10-2026)
+De gebruiker wil database-wijzigingen en tests níet handmatig hoeven te
+plakken. De Supabase-koppeling vraagt om een bevestiging (die in de praktijk
+wordt geannuleerd) bij: `drop`, `delete`, en `update`/`delete` zonder
+`where`. Daarom:
+- **Migraties zijn altijd toevoegend**: `create`, `create or replace`,
+  `alter table ... add`, en herhaalbaar (`if not exists`). Nooit `drop`.
+  Verandert de vorm van een functie (andere kolommen of parameters), dan
+  krijgt de nieuwe versie een nieuwe naam en wordt de oude met
+  `create or replace` een doorgeefluik naar de nieuwe. Voorbeeld:
+  `verlof_details()` → `verlof_overzicht()`, `samenvatting()` →
+  `samenvatting(date)`.
+- **Tests en losse SQL**: geen `delete`; elke `update` met een `where`.
+  Testdata verdwijnt via `rollback`. Een verzonnen testgebruiker zonder
+  account kan met `set local session_replication_role = replica` (alleen
+  binnen de transactie), zodat er niets in `auth` geschreven hoeft te
+  worden.
+- Volgorde bij uitrollen: eerst de migratie (via `apply_migration`), dan
+  de SQL-tests (via `execute_sql`), dan pas pushen.
+- Is opruimen toch echt nodig (een overbodige functie, oude data), dan
+  eerst aan de gebruiker vragen en het als losse, bewuste stap doen.
 
 ## Werkwijze-afspraken
 

@@ -225,7 +225,7 @@ export const demoApi = {
   async signOut() { location.search = ''; },
   async sendLoginLink() {},
   async rpc(fn, args = {}) {
-    const f = { dagen, weekoverzicht, verlof_details: verlofDetails, potje_saldi: potjeSaldi, samenvatting, nieuw_jaar: nieuwJaar }[fn];
+    const f = { dagen, weekoverzicht, verlof_overzicht: verlofDetails, verlof_details: verlofDetails, potje_saldi: potjeSaldi, samenvatting, nieuw_jaar: nieuwJaar }[fn];
     if (!f) throw new Error(`Onbekende functie ${fn}`);
     return clone(f(args));
   },

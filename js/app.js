@@ -140,7 +140,7 @@ async function toonOverzicht(main) {
     api.rpc('potje_saldi', { incl_gepland: false }),
     api.rpc('potje_saldi', { incl_gepland: true }),
     api.rpc('weekoverzicht', { p_jaar: DIT_JAAR }),
-    api.rpc('verlof_details'),
+    api.rpc('verlof_overzicht'),
     instellingen(),
   ]);
   const upd = n(s.uren_per_dag), upw = n(s.uren_per_week);
@@ -355,7 +355,7 @@ async function toonWeken(main, arg) {
 /* ---------- verlof ---------- */
 async function toonVerlof(main, arg) {
   const jaar = geldigJaar(+arg || DIT_JAAR);
-  const alles = await api.rpc('verlof_details');
+  const alles = await api.rpc('verlof_overzicht');
   const lijst = alles.filter(v => jaarVan(v.begin) === jaar || jaarVan(v.eind) === jaar);
   const som = b => lijst.filter(v => v.bron === b).reduce((a, v) => a + n(v.kosten_uren), 0);
 
@@ -532,7 +532,7 @@ function verlofFormulier(v, jaar) {
 async function toonJaar(main, arg) {
   const jaar = geldigJaar(+arg || DIT_JAAR);
   const dagen = await api.rpc('dagen', { van: `${jaar}-01-01`, tot: `${jaar}-12-31` });
-  const verlof = await api.rpc('verlof_details');
+  const verlof = await api.rpc('verlof_overzicht');
   const status = new Map(verlof.map(v => [v.id, v]));
   const perMaand = Array.from({ length: 12 }, () => []);
   dagen.forEach(d => perMaand[+d.datum.slice(5, 7) - 1].push(d));

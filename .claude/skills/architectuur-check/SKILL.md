@@ -26,7 +26,10 @@ wijzigen. Loop langs:
    gebruikt worden.
 6. **Migraties** — bestaande, al uitgevoerde migraties worden nooit
    herschreven; wijzigingen staan in een nieuw genummerd bestand. Komt de
-   database (`list_migrations`) overeen met de map?
+   database (`list_migrations`) overeen met de map? Zijn migraties en
+   tests vrij van `drop`, `delete` en `update` zonder `where` (zodat
+   Claude ze zelf kan uitvoeren)? Welke oude functies zijn alleen nog
+   doorgeefluik, en wordt de app nog ergens via die oude naam bediend?
 7. **Consistentie** — gebruiken nieuwe schermen de CSS-variabelen
    (`--saldo`, `--bank`, …) en bestaande componenten (`.vlak`, `.knop`,
    `.chip`, dialog), of staan er losse hardgecodeerde waarden?

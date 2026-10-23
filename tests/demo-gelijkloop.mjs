@@ -77,7 +77,7 @@ await api.remove('week_uren', { jaar: 2027, weeknr: 2 });
 await api.insert('verlof', { begin: '2026-12-24', eind: '2026-12-31', omschrijving: 'Kerst', bron: 'saldo', uren_handmatig: null, geboekt: false, geboekte_uren: null });
 await api.insert('verlof', { begin: '2026-02-25', eind: '2026-02-28', omschrijving: 'Weekje weg', bron: 'urenbank', uren_handmatig: null, geboekt: false, geboekte_uren: null });
 await api.insert('verlof', { begin: '2026-07-06', eind: '2026-08-02', omschrijving: 'Zomer', bron: 'saldo', uren_handmatig: null, geboekt: true, geboekte_uren: 144 });
-const vd = async o => (await api.rpc('verlof_details')).find(v => v.omschrijving === o);
+const vd = async o => (await api.rpc('verlof_overzicht')).find(v => v.omschrijving === o);
 verwacht('Kerst kost 36 uur', 36, (await vd('Kerst')).kosten_uren);
 verwacht('Kerst 4 werkdagen', 4, (await vd('Kerst')).werkdagen);
 verwacht('Kerst 12 dagen vrij', 12, (await vd('Kerst')).dagen_aansluitend_vrij);

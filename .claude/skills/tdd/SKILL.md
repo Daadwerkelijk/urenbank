@@ -37,9 +37,11 @@ Self-validating, Timely.
 ## Waar de rekenregels in deze app zitten
 De rekenregels staan op twee plekken die gelijk moeten lopen:
 1. **De bron van waarheid**: SQL-functies in schema `urenbank`
-   (`supabase/migrations/002_urenbank_functies.sql`): `landelijke_feestdagen`,
-   `dagen`, `weken`, `weekoverzicht`, `verlof_details`, `potje_saldi`,
-   `samenvatting`, `nieuw_jaar`.
+   (`supabase/migrations/002_urenbank_functies.sql` en latere migraties,
+   nu t/m `004`): `landelijke_feestdagen`, `dagen`, `weken`,
+   `weekoverzicht`, `verlof_overzicht` (de app; `verlof_details` is een
+   doorgeefluik), `potje_saldi`, `samenvatting(date)` (de app;
+   `samenvatting()` is een doorgeefluik), `nieuw_jaar`.
 2. **De demo-kopie**: `js/demo.js` rekent hetzelfde na in JavaScript voor
    `?demo`.
 
@@ -47,13 +49,14 @@ Een rekenregel wijzigen = in beide, en beide testsets moeten groen zijn.
 
 ## Hoe tests hier draaien
 - **Database**: `tests/sql/rekenregels.sql`. Draait in één transactie met
-  een verzonnen testgebruiker en eindigt met `ROLLBACK`, dus er blijft
-  niets achter en echte data wordt niet geraakt. Een falende assert stopt
-  met `ROOD: <naam> — verwacht X, kreeg Y`; het laatste resultaat is
-  `ALLES GROEN`. Uitvoeren via de Supabase SQL-editor of `execute_sql`
-  (Supabase MCP). Omdat het script tijdelijk een testgebruiker in
-  `auth.users` aanmaakt, kan de MCP om bevestiging vragen: vraag de
-  gebruiker dan om akkoord, probeer het niet stilletjes anders.
+  een verzonnen testgebruiker (zonder account, via
+  `session_replication_role = replica`) en eindigt met `ROLLBACK`, dus er
+  blijft niets achter en echte data wordt niet geraakt. Een falende assert
+  stopt met `ROOD: <naam> — verwacht X, kreeg Y`; het laatste resultaat is
+  `ALLES GROEN`. **Claude draait dit zelf** via `execute_sql` (Supabase
+  MCP): de inhoud vanaf `begin;` zonder commentaarregels. Houd het script
+  vrij van `drop`, `delete` en `update` zonder `where`, anders vraagt de
+  MCP om een bevestiging die niet doorkomt (zie CLAUDE.md).
 - **Demo-kopie**: `node tests/demo-gelijkloop.mjs` (Node, geen browser of
   netwerk nodig). Zelfde scenario, zelfde verwachte uitkomsten.
 - Controleer aan het begin van een sessie of `node` beschikbaar is
@@ -62,8 +65,9 @@ Een rekenregel wijzigen = in beide, en beide testsets moeten groen zijn.
 
 Een nieuwe regel testen: voeg een `pg_temp.verwacht(...)`-regel toe aan de
 SQL-test (en een `verwacht(...)` in de gelijkloop-test), draai, zie ROOD,
-pas de functie aan in een nieuwe migratie (`003_...sql`, nooit een
-bestaande migratie herschrijven die al is uitgevoerd), draai opnieuw tot
+pas de functie aan in een nieuwe migratie (volgend nummer, nooit een
+bestaande migratie herschrijven die al is uitgevoerd; alleen toevoegend,
+zonder `drop`), voer die zelf uit met `apply_migration`, draai opnieuw tot
 GROEN.
 
 ## Wel en niet TDD-geschikt

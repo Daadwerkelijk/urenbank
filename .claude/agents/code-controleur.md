@@ -21,7 +21,9 @@ Loop de recent gewijzigde bestanden na op:
 6. Nieuwe migraties in `supabase/migrations/` zonder `enable row level
    security` en policy `eigen_rijen`, met `using (true)`, met rechten voor
    `anon`, of functies zonder `set search_path = ''`. Een al uitgevoerde
-   migratie mag niet zijn herschreven.
+   migratie mag niet zijn herschreven. Migraties en SQL-tests mogen geen
+   `drop`, `delete` of `update` zonder `where` bevatten (afspraak in
+   CLAUDE.md: anders kan Claude ze niet zelf uitvoeren).
 7. Of `CACHE` in `sw.js` is opgehoogd bij een wijziging aan app-bestanden,
    en of nieuwe bestanden in `SCHIL` staan.
 8. Of de tests zijn bijgewerkt bij een rekenregelwijziging
