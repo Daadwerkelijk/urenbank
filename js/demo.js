@@ -212,6 +212,7 @@ export const demoApi = {
   async signIn() {},
   async signOut() { location.search = ''; },
   async resetPassword() {},
+  async sendLoginLink() {},
   async setPassword() {},
   herstelLink: () => false,
   async rpc(fn, args = {}) {

@@ -757,20 +757,42 @@ function toonLogin(bericht = '') {
     <div class="login">
       <p class="merk">Uren<span>bank</span></p>
       <p class="muted">Houd bij hoeveel uur je op de bank hebt, hoeveel verlof er over is en wanneer je vrij bent.</p>
-      <form id="login-form">
+      <form id="link-form">
         <label class="veld"><span>E-mailadres</span><input type="email" name="email" autocomplete="username" required></label>
-        <label class="veld"><span>Wachtwoord</span><input type="password" name="wachtwoord" autocomplete="current-password" required></label>
-        <p class="fout-tekst" id="login-fout" role="alert"></p>
-        <p class="info" id="login-info" role="status" style="margin:0">${esc(bericht)}</p>
-        <button class="knop">Inloggen</button>
-        <button type="button" class="knop-tekst" id="vergeten" style="justify-self:start">Wachtwoord vergeten?</button>
+        <p class="fout-tekst" id="link-fout" role="alert"></p>
+        <p class="info" id="link-info" role="status" style="margin:0">${esc(bericht)}</p>
+        <button class="knop">Stuur inloglink</button>
       </form>
+      <details style="margin-top:1.5rem">
+        <summary class="knop-tekst" style="display:inline">Inloggen met wachtwoord</summary>
+        <form id="login-form">
+          <label class="veld"><span>E-mailadres</span><input type="email" name="email" autocomplete="username" required></label>
+          <label class="veld"><span>Wachtwoord</span><input type="password" name="wachtwoord" autocomplete="current-password" required></label>
+          <p class="fout-tekst" id="login-fout" role="alert"></p>
+          <button class="knop licht">Inloggen</button>
+        </form>
+      </details>
       <p class="info" style="margin-top:1.5rem">Eerst rondkijken? <a href="?demo">Bekijk de demo met voorbeelddata</a>.</p>
     </div>`;
+  const lf = $('#link-form');
+  lf.addEventListener('submit', async e => {
+    e.preventDefault();
+    const knop = $('button', lf), email = lf.email.value.trim();
+    $('#link-fout').textContent = ''; $('#link-info').textContent = '';
+    knop.disabled = true;
+    try {
+      await api.sendLoginLink(email);
+      $('#link-info').textContent = `Er staat een mail met een inloglink in ${email}. Open de link op dit apparaat; je blijft daarna ingelogd.`;
+    } catch (err) {
+      $('#link-fout').textContent = err.message;
+    } finally {
+      knop.disabled = false;
+    }
+  });
   const f = $('#login-form');
   f.addEventListener('submit', async e => {
     e.preventDefault();
-    const knop = $('button.knop', f);
+    const knop = $('button', f);
     knop.disabled = true;
     $('#login-fout').textContent = '';
     try {
@@ -781,22 +803,6 @@ function toonLogin(bericht = '') {
       $('#login-fout').textContent = err.message;
     } finally {
       knop.disabled = false;
-    }
-  });
-  $('#vergeten').addEventListener('click', async () => {
-    const email = f.email.value.trim();
-    $('#login-fout').textContent = '';
-    $('#login-info').textContent = '';
-    if (!email || !f.email.checkValidity()) {
-      $('#login-fout').textContent = 'Vul eerst je e-mailadres in.';
-      return f.email.focus();
-    }
-    try {
-      await api.resetPassword(email);
-      $('#login-info').textContent = `Als ${email} een account heeft, staat er nu een mail met een link om een nieuw wachtwoord te kiezen. Open de link op dit apparaat.`;
-    } catch (err) {
-      $('#login-fout').textContent = /rate limit|seconds/i.test(err.message)
-        ? 'Je hebt net al een mail aangevraagd. Wacht een minuut en probeer het opnieuw.' : err.message;
     }
   });
 }
@@ -830,8 +836,9 @@ function toonNieuwWachtwoord() {
 }
 
 let herstelModus = api.herstelLink();
-api.onAuth((_s, gebeurtenis) => {
+api.onAuth((sessie, gebeurtenis) => {
   if (gebeurtenis === 'PASSWORD_RECOVERY') { herstelModus = true; toonNieuwWachtwoord(); }
+  else if (gebeurtenis === 'SIGNED_IN' && sessie && !$('#inhoud')) { history.replaceState(null, '', location.pathname + location.search); start(); }
 });
 
 async function start() {

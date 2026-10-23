@@ -26,6 +26,13 @@ async function supabaseApi() {
     onAuth(cb) {
       sb.auth.onAuthStateChange((e, s) => { sessie = s; cb(s, e); });
     },
+    async sendLoginLink(email) {
+      const terug = location.origin + location.pathname;
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: terug, shouldCreateUser: false } });
+      if (error) throw new Error(/signups not allowed|not found/i.test(error.message)
+        ? 'Er is geen account met dit e-mailadres.'
+        : /rate limit|seconds/i.test(error.message) ? 'Je hebt net al een link aangevraagd. Wacht een minuut en probeer het opnieuw.' : error.message);
+    },
     async resetPassword(email) {
       const terug = location.origin + location.pathname;
       const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: terug });
