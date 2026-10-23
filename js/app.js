@@ -287,7 +287,7 @@ async function toonWeken(main, arg) {
       <p class="muted" style="margin:0">Urenbank eind laatst ingevulde week: <strong class="num ${klasseTeken(n(laatste?.urenbank_cumulatief))}">${laatste ? fmtTeken(n(laatste.urenbank_cumulatief)) : '–'}</strong></p>
     </div>
     <p class="info" style="margin-top:0">Vul per week de uren in die je in Timetell hebt geschreven: gewerkt plus verlof dat je bij P&amp;O boekt. Verlof uit je urenbank schrijf je niet. Open een week om je rooster per dag aan te passen, bijvoorbeeld als je je vrije dag schuift.</p>
-    <div class="tabel-wrap">
+    <div class="tabel-wrap plakkop">
       <table class="weken-tabel">
         <thead><tr><th>Week</th><th>Periode</th><th class="r norm-kol">Norm</th><th class="r">Timetell</th><th class="r">Verschil</th><th class="r">Urenbank</th><th class="bijz">Bijzonderheden</th></tr></thead>
         <tbody>
