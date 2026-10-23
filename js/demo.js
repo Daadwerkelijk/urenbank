@@ -211,6 +211,9 @@ export const demoApi = {
   email: () => 'demo@voorbeeld.nl',
   async signIn() {},
   async signOut() { location.search = ''; },
+  async resetPassword() {},
+  async setPassword() {},
+  herstelLink: () => false,
   async rpc(fn, args = {}) {
     const f = { dagen, weekoverzicht, verlof_details: verlofDetails, potje_saldi: potjeSaldi, samenvatting, nieuw_jaar: nieuwJaar }[fn];
     if (!f) throw new Error(`Onbekende functie ${fn}`);

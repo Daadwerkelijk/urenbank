@@ -24,8 +24,20 @@ async function supabaseApi() {
       return sessie;
     },
     onAuth(cb) {
-      sb.auth.onAuthStateChange((_e, s) => { sessie = s; cb(s); });
+      sb.auth.onAuthStateChange((e, s) => { sessie = s; cb(s, e); });
     },
+    async resetPassword(email) {
+      const terug = location.origin + location.pathname;
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: terug });
+      if (error) throw new Error(error.message);
+    },
+    async setPassword(password) {
+      const { error } = await sb.auth.updateUser({ password });
+      if (error) throw new Error(/should be at least/i.test(error.message)
+        ? 'Kies een wachtwoord van minimaal 6 tekens.'
+        : /same/i.test(error.message) ? 'Kies een ander wachtwoord dan je huidige.' : error.message);
+    },
+    herstelLink: () => /type=recovery/.test(location.hash),
     uid: () => sessie?.user?.id,
     email: () => sessie?.user?.email,
     async signIn(email, password) {

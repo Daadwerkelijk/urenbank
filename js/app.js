@@ -752,7 +752,7 @@ function potjeFormulier(p, main) {
 }
 
 /* ---------- login en start ---------- */
-function toonLogin() {
+function toonLogin(bericht = '') {
   $('#app').innerHTML = `
     <div class="login">
       <p class="merk">Uren<span>bank</span></p>
@@ -761,15 +761,18 @@ function toonLogin() {
         <label class="veld"><span>E-mailadres</span><input type="email" name="email" autocomplete="username" required></label>
         <label class="veld"><span>Wachtwoord</span><input type="password" name="wachtwoord" autocomplete="current-password" required></label>
         <p class="fout-tekst" id="login-fout" role="alert"></p>
+        <p class="info" id="login-info" role="status" style="margin:0">${esc(bericht)}</p>
         <button class="knop">Inloggen</button>
+        <button type="button" class="knop-tekst" id="vergeten" style="justify-self:start">Wachtwoord vergeten?</button>
       </form>
       <p class="info" style="margin-top:1.5rem">Eerst rondkijken? <a href="?demo">Bekijk de demo met voorbeelddata</a>.</p>
     </div>`;
-  $('#login-form').addEventListener('submit', async e => {
+  const f = $('#login-form');
+  f.addEventListener('submit', async e => {
     e.preventDefault();
-    const f = e.target;
-    const knop = $('button', f);
+    const knop = $('button.knop', f);
     knop.disabled = true;
+    $('#login-fout').textContent = '';
     try {
       await api.signIn(f.email.value.trim(), f.wachtwoord.value);
       await api.session();
@@ -780,10 +783,60 @@ function toonLogin() {
       knop.disabled = false;
     }
   });
+  $('#vergeten').addEventListener('click', async () => {
+    const email = f.email.value.trim();
+    $('#login-fout').textContent = '';
+    $('#login-info').textContent = '';
+    if (!email || !f.email.checkValidity()) {
+      $('#login-fout').textContent = 'Vul eerst je e-mailadres in.';
+      return f.email.focus();
+    }
+    try {
+      await api.resetPassword(email);
+      $('#login-info').textContent = `Als ${email} een account heeft, staat er nu een mail met een link om een nieuw wachtwoord te kiezen. Open de link op dit apparaat.`;
+    } catch (err) {
+      $('#login-fout').textContent = /rate limit|seconds/i.test(err.message)
+        ? 'Je hebt net al een mail aangevraagd. Wacht een minuut en probeer het opnieuw.' : err.message;
+    }
+  });
 }
+
+function toonNieuwWachtwoord() {
+  $('#app').innerHTML = `
+    <div class="login">
+      <p class="merk">Uren<span>bank</span></p>
+      <p class="muted">Kies een nieuw wachtwoord voor ${esc(api.email() || 'je account')}.</p>
+      <form id="ww-form">
+        <label class="veld"><span>Nieuw wachtwoord</span><input type="password" name="ww1" autocomplete="new-password" minlength="6" required></label>
+        <label class="veld"><span>Herhaal wachtwoord</span><input type="password" name="ww2" autocomplete="new-password" minlength="6" required></label>
+        <p class="fout-tekst" id="ww-fout" role="alert"></p>
+        <button class="knop">Wachtwoord opslaan</button>
+      </form>
+    </div>`;
+  $('#ww-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target;
+    if (f.ww1.value.length < 6) return ($('#ww-fout').textContent = 'Kies een wachtwoord van minimaal 6 tekens.');
+    if (f.ww1.value !== f.ww2.value) return ($('#ww-fout').textContent = 'De twee wachtwoorden zijn niet gelijk.');
+    try {
+      await api.setPassword(f.ww1.value);
+      history.replaceState(null, '', location.pathname);
+      melding('Wachtwoord opgeslagen');
+      start();
+    } catch (err) {
+      $('#ww-fout').textContent = err.message;
+    }
+  });
+}
+
+let herstelModus = api.herstelLink();
+api.onAuth((_s, gebeurtenis) => {
+  if (gebeurtenis === 'PASSWORD_RECOVERY') { herstelModus = true; toonNieuwWachtwoord(); }
+});
 
 async function start() {
   const sessie = await api.session();
+  if (herstelModus && sessie) { herstelModus = false; return toonNieuwWachtwoord(); }
   if (!sessie) return toonLogin();
   skelet();
   router();
