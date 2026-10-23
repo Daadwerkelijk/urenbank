@@ -2,9 +2,17 @@
 -- 1. Urenbank per kalenderjaar: begint elk jaar op 0 (startsaldo alleen in het startjaar).
 -- 2. Verlofpotjes tellen in de samenvatting pas mee vanaf "beschikbaar vanaf" (peildatum instelbaar voor tests).
 -- 3. verlof_details meldt overlappend verlof (overlapt_met).
--- 4. Onzinnige jaartallen worden geweigerd (alleen 2000 t/m 2100).
+-- 4. Onzinnige jaartallen worden geweigerd (alleen 2000 t/m 2100), ook als opbouwjaar van een potje.
+-- Herhaalbaar: kan opnieuw worden uitgevoerd als een eerdere poging halverwege stopte.
 
-alter table urenbank.week_uren add constraint week_uren_jaar_redelijk check (jaar between 2000 and 2100);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'week_uren_jaar_redelijk') then
+    alter table urenbank.week_uren add constraint week_uren_jaar_redelijk check (jaar between 2000 and 2100);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'verlof_potje_opbouwjaar_redelijk') then
+    alter table urenbank.verlof_potje add constraint verlof_potje_opbouwjaar_redelijk check (opbouwjaar between 2000 and 2100);
+  end if;
+end $$;
 
 create or replace function urenbank.weekoverzicht(p_jaar int default null)
 returns table (jaar int, weeknr int, van date, tot date, norm_uren numeric, timetell_uren numeric,
@@ -55,8 +63,8 @@ begin
   order by cum.van;
 end $$;
 
-drop function urenbank.verlof_details();
-create function urenbank.verlof_details()
+drop function if exists urenbank.verlof_details();
+create or replace function urenbank.verlof_details()
 returns table (id bigint, begin date, eind date, omschrijving text, bron text, soort_overig text,
                werkdagen int, berekende_uren numeric, kosten_uren numeric, uren_handmatig numeric,
                geboekt boolean, geboekte_uren numeric, verschil_geboekt numeric,
@@ -78,7 +86,7 @@ language sql stable set search_path = '' as $$
          e.van, e.tot, (e.tot - e.van + 1)::int,
          case when vl.eind < current_date then 'voorbij'
               when vl.begin <= current_date then 'lopend' else 'gepland' end,
-         (select string_agg(a.omschrijving, ', ' order by a.begin) from vl a
+         (select string_agg(a.omschrijving, ', ' order by a.begin, a.id) from vl a
            where a.id <> vl.id and a.begin <= vl.eind and a.eind >= vl.begin)
   from vl
   cross join lateral (
@@ -89,8 +97,9 @@ language sql stable set search_path = '' as $$
   order by vl.begin, vl.id
 $$;
 
-drop function urenbank.samenvatting();
-create function urenbank.samenvatting(p_peildatum date default current_date)
+drop function if exists urenbank.samenvatting();
+drop function if exists urenbank.samenvatting(date);
+create or replace function urenbank.samenvatting(p_peildatum date default current_date)
 returns jsonb language sql stable set search_path = '' as $$
   with inst as (
     select coalesce(max(i.uren_per_dag), 9) as upd, coalesce(max(i.uren_per_week), 36) as upw
@@ -143,3 +152,5 @@ $$;
 
 revoke all on all functions in schema urenbank from public, anon;
 grant execute on all functions in schema urenbank to authenticated;
+
+notify pgrst, 'reload schema';

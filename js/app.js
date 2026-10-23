@@ -35,7 +35,8 @@ function controleer(waarde, { min, max, naam, heel = false }) {
 // Technische databasemeldingen omzetten naar gewone taal
 function begrijpelijk(e) {
   const m = String(e?.message || e || '');
-  if (/numeric field overflow|out of range/i.test(m)) return 'Dit getal is te groot. Controleer wat je hebt ingevuld.';
+  if (/numeric field overflow/i.test(m)) return 'Dit getal is te groot. Controleer wat je hebt ingevuld.';
+  if (/out of range|invalid input syntax|date/i.test(m) && /date|jaar|year/i.test(m)) return 'Deze datum of dit jaar kan niet. Controleer wat je hebt ingevuld.';
   if (/violates check constraint/i.test(m)) return 'Deze waarde kan niet. Controleer of de getallen en datums kloppen.';
   if (/duplicate key|already exists/i.test(m)) return 'Dit bestaat al.';
   if (/JWT|not authenticated|permission denied|row-level security/i.test(m)) return 'Je bent niet meer ingelogd. Ververs de pagina en log opnieuw in.';
@@ -135,7 +136,7 @@ const POTKLEUR = ['var(--saldo)', 'var(--saldo-2)', 'var(--gekocht)', 'var(--sal
 
 async function toonOverzicht(main) {
   const [s, potjes, potjesPlan, weken, verlof, inst] = await Promise.all([
-    api.rpc('samenvatting'),
+    api.rpc('samenvatting', { p_peildatum: VANDAAG }),
     api.rpc('potje_saldi', { incl_gepland: false }),
     api.rpc('potje_saldi', { incl_gepland: true }),
     api.rpc('weekoverzicht', { p_jaar: DIT_JAAR }),
@@ -255,7 +256,9 @@ function maakSignalen({ s, potjesPlan, weken, verlof, inst }) {
     uit.push(['let-op', `<span>Je urenbank staat op ${fmtTeken(ub, fmtU)} uur: je hebt minder geschreven dan je norm.</span>`]);
   }
   const dubbel = verlof.filter(v => v.overlapt_met && v.status !== 'voorbij');
-  if (dubbel.length) uit.push(['fout', `<span>Dubbel verlof: ${dubbel.map(v => `<strong>${esc(v.omschrijving)}</strong>`).join(' en ')} vallen over elkaar heen.</span>`]);
+  for (const v of dubbel.filter((v, i) => !dubbel.slice(0, i).some(x => (x.overlapt_met || '').split(', ').includes(v.omschrijving)))) {
+    uit.push(['fout', `<span>Dubbel verlof: <strong>${esc(v.omschrijving)}</strong> valt over <strong>${esc(v.overlapt_met)}</strong>. Controleer of dit niet dubbel is ingevoerd.</span>`]);
+  }
   if (n(s.verlof_vervallen) > 0) uit.push(['fout', `<span>${fmtU(s.verlof_vervallen)} uur verlof is vervallen.</span>`]);
   return uit;
 }
@@ -398,7 +401,7 @@ function verlofItem(v) {
         <span>${v.werkdagen} ${v.werkdagen === 1 ? 'werkdag' : 'werkdagen'}</span>
         <span>${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij (${periode(v.vrij_van, v.vrij_tot)})</span>
       </div>
-      ${v.overlapt_met ? `<p class="fout-tekst" style="margin:0">Valt over: ${esc(v.overlapt_met)}. Deze dagen tellen dubbel.</p>` : ''}
+      ${v.overlapt_met ? `<p class="fout-tekst" style="margin:0">Valt over: ${esc(v.overlapt_met)}. Controleer of dit niet dubbel is ingevoerd.</p>` : ''}
       <div class="rij" style="gap:0.5rem"><span class="chip ${esc(v.bron)}">${v.bron === 'overig' && v.soort_overig ? esc(v.soort_overig) : BRON[v.bron]}</span>${boekStatus}</div>
     </div>
     <div class="kosten">
@@ -446,7 +449,8 @@ function verlofFormulier(v, jaar) {
   const overlap = () => bestaand.filter(x => x.id !== v.id && f.begin.value && f.eind.value && x.begin <= f.eind.value && x.eind >= f.begin.value);
   const opslaanKnop = $('button[value=bewaar]', f);
   const opslaanTekst = opslaanKnop.textContent;
-  api.list('verlof').then(r => { bestaand = r; voorvertoning(); }).catch(() => {});
+  api.list('verlof').then(r => { bestaand = r; voorvertoning(); })
+    .catch(e => { $('#formfout', f).textContent = `Controle op dubbel verlof lukt niet: ${begrijpelijk(e)}`; });
 
   const zichtbaarheid = () => {
     const bron = f.bron.value;
@@ -674,7 +678,7 @@ async function toonInstellingen(main) {
     <h2>Werksessies en schoolvakanties</h2>
     <div class="vlak">
       <p class="info" style="margin-top:0">Alleen ter informatie in je planning en jaarkaart. Ze veranderen je uren niet.</p>
-      ${agenda.length ? `<ul class="signalen">${agenda.map(a => `<li><span>${periode(a.begin, a.eind)}: ${esc(a.omschrijving)} <span class="muted">(${a.soort})</span> <button class="knop-tekst" data-wis-ag="${a.id}">Verwijderen</button></span></li>`).join('')}</ul>` : ''}
+      ${agenda.length ? `<ul class="signalen">${agenda.map(a => `<li><span>${periode(a.begin, a.eind)}: ${esc(a.omschrijving)} <span class="muted">(${esc({ werksessie: 'werksessie', schoolvakantie: 'schoolvakantie', info: 'overig' }[a.soort] || a.soort)})</span> <button class="knop-tekst" data-wis-ag="${a.id}">Verwijderen</button></span></li>`).join('')}</ul>` : ''}
       <form id="ag-form" class="velden sectie" style="align-items:end">
         <label class="veld"><span>Van</span><input type="date" name="begin" required></label>
         <label class="veld"><span>Tot en met</span><input type="date" name="eind" required></label>
@@ -830,6 +834,9 @@ function potjeFormulier(p, main) {
     e.preventDefault();
     const uren = n(f.uren.value);
     if (uren == null || uren <= 0 || uren > 2000) return melding('Vul een aantal uren tussen 0 en 2.000 in.', true);
+    const opbouwjaar = Number(f.opbouwjaar.value);
+    if (!f.opbouwjaar.value || geldigJaar(opbouwjaar) !== opbouwjaar) return melding(`Vul een jaar tussen ${JAAR_MIN} en ${JAAR_MAX} in.`, true);
+    if (!f.beschikbaar_vanaf.value) return melding('Vul in vanaf wanneer het potje beschikbaar is.', true);
     if (f.soort.value === 'gekocht' && uren > 187) melding('Let op: meer dan 187 uur kopen staat de cao niet toe.', true);
     const rij = { soort: f.soort.value, opbouwjaar: +f.opbouwjaar.value, uren, beschikbaar_vanaf: f.beschikbaar_vanaf.value, prioriteit: p.prioriteit, toelichting: f.toelichting.value.trim() || null, correctie: 0 };
     if (await bewaar(() => api.insert('verlof_potje', rij), 'Potje toegevoegd')) { sluit(); toonInstellingen(main); }

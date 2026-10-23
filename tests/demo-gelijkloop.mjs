@@ -113,6 +113,11 @@ await api.upsert('instellingen', { user_id: 'demo', verval_wettelijk_maanden: 12
 // Tekort wordt zichtbaar
 await api.insert('verlof', { begin: '2026-09-01', eind: '2026-09-01', omschrijving: 'Te veel', bron: 'saldo', uren_handmatig: null, geboekt: true, geboekte_uren: 900 });
 verwacht('Tekort bij te veel verlof', true, (await api.rpc('potje_saldi')).some(p => p.soort === 'tekort'));
+const sTekort = await api.rpc('samenvatting', { p_peildatum: '2026-10-23' });
+verwacht('Samenvatting: tekort (900 - 165,2)', 734.8, sTekort.verlof_tekort);
+verwacht('Samenvatting: totaal met tekort (0 - 734,8 + 2)', -732.8, sTekort.totaal);
+verwacht('Samenvatting: na planning met tekort (-734,8 - 36)', -770.8, sTekort.verlof_saldo_na_planning);
+await geeftFout('Potje met opbouwjaar 0 wordt geweigerd', () => api.insert('verlof_potje', { soort: 'gekocht', opbouwjaar: 0, uren: 1, correctie: 0, beschikbaar_vanaf: '2026-01-01', prioriteit: 99 }));
 
 console.log(rood ? `\n${rood} test(s) ROOD` : '\nALLES GROEN');
 process.exit(rood ? 1 : 0);

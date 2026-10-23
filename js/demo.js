@@ -133,7 +133,7 @@ function verlofDetails() {
       vrij_van: van, vrij_tot: tot, dagen_aansluitend_vrij: diffDays(van, tot) + 1,
       status: v.eind < vandaag ? 'voorbij' : v.begin <= vandaag ? 'lopend' : 'gepland',
       overlapt_met: store.verlof.filter(a => a.id !== v.id && a.begin <= v.eind && a.eind >= v.begin)
-        .sort((x, y) => x.begin.localeCompare(y.begin)).map(a => a.omschrijving).join(', ') || null };
+        .sort((x, y) => x.begin.localeCompare(y.begin) || x.id - y.id).map(a => a.omschrijving).join(', ') || null };
   });
 }
 
@@ -235,6 +235,7 @@ export const demoApi = {
     return clone(rows);
   },
   async insert(table, row) {
+    if (table === 'verlof_potje' && !(row.opbouwjaar >= 2000 && row.opbouwjaar <= 2100)) throw new Error('violates check constraint "verlof_potje_opbouwjaar_redelijk"');
     const r = { user_id: 'demo', ...row };
     if (!PK[table]) r.id = nextId++;
     store[table].push(r);

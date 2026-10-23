@@ -2,7 +2,8 @@
 -- Draait volledig binnen één transactie met een verzonnen testgebruiker en eindigt met ROLLBACK:
 -- er blijft niets achter en echte gebruikersdata wordt niet gelezen of gewijzigd.
 -- Elke assert faalt met een duidelijke melding; geen melding = alles groen.
--- Uitvoeren: plak in de Supabase SQL-editor of via execute_sql (Supabase MCP).
+-- Uitvoeren: plak in de Supabase SQL Editor en klik Run (via de MCP vraagt het om een bevestiging).
+-- Vereist migratie 003.
 
 begin;
 
@@ -115,6 +116,15 @@ update urenbank.instellingen set verval_wettelijk_maanden = 12;
 -- Tekort wordt zichtbaar in plaats van stil weggeslikt
 insert into urenbank.verlof (begin, eind, omschrijving, bron, geboekt, geboekte_uren) values ('2026-09-01', '2026-09-01', 'Te veel', 'saldo', true, 900);
 select pg_temp.verwacht('Tekort bij te veel verlof', true, exists (select 1 from urenbank.potje_saldi(false) where soort = 'tekort'));
+select pg_temp.verwacht('Samenvatting: tekort (900 - 165,2)', 734.8::numeric, (urenbank.samenvatting('2026-10-23')->>'verlof_tekort')::numeric);
+select pg_temp.verwacht('Samenvatting: totaal met tekort (0 - 734,8 + 2)', -732.8::numeric, (urenbank.samenvatting('2026-10-23')->>'totaal')::numeric);
+select pg_temp.verwacht('Samenvatting: na planning met tekort (-734,8 - 36)', -770.8::numeric, (urenbank.samenvatting('2026-10-23')->>'verlof_saldo_na_planning')::numeric);
+do $$ begin
+  insert into urenbank.verlof_potje (soort, opbouwjaar, uren, beschikbaar_vanaf, prioriteit) values ('gekocht', 0, 1, '2026-01-01', 99);
+  raise exception 'ROOD: Potje met opbouwjaar 0 wordt geweigerd — geen fout gekregen';
+exception when others then
+  if sqlerrm like 'ROOD:%' then raise; end if;
+end $$;
 
 -- Rijbeveiliging: een andere gebruiker ziet niets
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b2","role":"authenticated"}', true);
