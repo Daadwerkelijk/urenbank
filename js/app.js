@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { AGENDA_FEED_URL } from './config.js';
 
 /* ---------- hulpjes ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -156,8 +157,10 @@ async function toonOverzicht(main) {
   const deze = weken.find(w => w.van <= VANDAAG && w.tot >= VANDAAG);
   const gepland = verlof.filter(v => v.status !== 'voorbij' && v.bron !== 'overig');
   const signalen = maakSignalen({ s, potjesPlan, weken, verlof, inst });
+  const overgang = await jaarovergangBlok(inst, potjes);
 
   main.innerHTML = `
+    ${overgang}
     <section class="stand" aria-labelledby="stand-label">
       <p class="stand-label" id="stand-label">Vrij op te nemen per vandaag</p>
       <p class="stand-getal num">${fmtU(s.totaal)}<small>uur</small></p>
@@ -186,6 +189,7 @@ async function toonOverzicht(main) {
           <div><span class="muted">Norm</span><br><span class="num" style="font-size:1.6rem">${fmt(deze.norm_uren)}</span></div>
           <div><span class="muted">Verschil</span><br><span class="num ${klasseTeken(n(deze.verschil))}" style="font-size:1.6rem">${deze.verschil == null ? '–' : fmtTeken(n(deze.verschil))}</span></div>
         </div>
+        ${deze.timetell_uren == null ? `<button class="knop licht" id="vul-norm" style="margin-top:0.75rem">Zoals gepland: ${fmt(deze.norm_uren)} uur invullen</button>` : ''}
         ${deze.feestdagen || deze.verlof ? `<p class="info">${[deze.feestdagen, deze.verlof].filter(Boolean).map(esc).join(', ')}</p>` : ''}` : '<p class="muted">Geen week gevonden.</p>'}
       </section>
       <section class="vlak" aria-labelledby="sig-kop">
@@ -198,6 +202,15 @@ async function toonOverzicht(main) {
     ${potjesTabel(potjes.filter(zichtbaar), potjesPlan, s)}
     <p class="info">De volgorde van afschrijven en de vervaldatums stel je in bij Instellingen. Geboekt verlof gaat eraf, ook als het in de toekomst ligt; gepland verlof zie je in de laatste kolom.</p>`;
 
+  $('#overgang-potjes')?.addEventListener('click', async () => {
+    if (await bewaar(() => api.rpc('nieuw_jaar', { p_jaar: DIT_JAAR }), `Potjes ${DIT_JAAR} toegevoegd`)) herlaad();
+  });
+  $('#overgang-klaar')?.addEventListener('click', async () => {
+    if (await bewaar(() => api.upsert('instellingen', { jaarovergang_klaar: DIT_JAAR }), `Jaarovergang ${DIT_JAAR} afgerond`)) { instellingenCache = null; herlaad(); }
+  });
+  $('#vul-norm')?.addEventListener('click', async () => {
+    if (await bewaar(() => api.upsert('week_uren', { jaar: DIT_JAAR, weeknr: deze.weeknr, timetell_uren: n(deze.norm_uren) }), `${fmt(deze.norm_uren)} uur ingevuld`)) herlaad();
+  });
   $('#deze-week')?.addEventListener('change', async e => {
     const v = n(e.target.value);
     const ok = await bewaar(() => (v != null && controleer(v, { min: 0, max: 100, naam: 'de weekuren' }), v == null
@@ -205,6 +218,31 @@ async function toonOverzicht(main) {
       : api.upsert('week_uren', { jaar: DIT_JAAR, weeknr: deze.weeknr, timetell_uren: v })));
     if (ok) herlaad();
   });
+}
+
+// Vanaf 1 januari: checklist voor de jaarovergang, tot de gebruiker hem afrondt
+async function jaarovergangBlok(inst, potjes) {
+  const afgerond = n(inst.jaarovergang_klaar) ?? jaarVan(inst.startdatum);
+  if (DIT_JAAR <= afgerond) return '';
+  const vorig = DIT_JAAR - 1;
+  const heeftPotjes = potjes.some(p => p.opbouwjaar === DIT_JAAR && p.soort === 'wettelijk');
+  const wkVorig = (await api.rpc('weekoverzicht', { p_jaar: vorig })).filter(w => w.timetell_uren != null);
+  const ubVorig = wkVorig.length ? n(wkVorig[wkVorig.length - 1].urenbank_cumulatief) : 0;
+  const nu = potjes.filter(p => p.soort !== 'tekort' && p.beschikbaar_vanaf <= VANDAAG && (p.vervalt_op ?? '9999') >= VANDAAG);
+  return `<section class="vlak overgang" aria-labelledby="overgang-kop">
+    <h2 id="overgang-kop" style="margin:0 0 0.5rem">Jaarovergang ${DIT_JAAR}</h2>
+    <p class="muted" style="margin:0 0 0.75rem">Loop deze drie punten na. Dit blok blijft staan tot je het afrondt.</p>
+    <ol class="overgang-lijst">
+      <li class="${heeftPotjes ? 'goed' : 'open'}"><strong>Potjes ${DIT_JAAR}</strong>
+        ${heeftPotjes ? '<span>Toegevoegd.</span>' : `<span>Nog niet toegevoegd.</span> <button class="knop klein" id="overgang-potjes">Potjes ${DIT_JAAR} toevoegen</button>`}</li>
+      <li class="${ubVorig === 0 ? 'goed' : 'open'}"><strong>Urenbank ${vorig}</strong>
+        <span>${ubVorig === 0 ? 'Stond op 31 december op 0.' : `Stond op ${fmtTeken(ubVorig, fmtU)} uur. Die uren gaan niet mee naar ${DIT_JAAR}; pas zo nodig de weekuren van ${vorig} aan.`}</span></li>
+      <li class="open"><strong>Vergelijk met "Mijn saldo" bij P&amp;O</strong>
+        <span>Komt de rest per potje overeen?</span>
+        <ul class="overgang-potjes">${nu.map(p => `<li>${esc(potjeNaam(p))}: <span class="num">${fmtU(p.rest)}</span></li>`).join('') || '<li class="muted">Nog geen potjes.</li>'}</ul></li>
+    </ol>
+    <button class="knop" id="overgang-klaar">Klopt, afgerond</button>
+  </section>`;
 }
 
 function potjesTabel(potjes, plan, s) {
@@ -300,7 +338,8 @@ async function toonWeken(main, arg) {
               <td class="periode">${periode(w.van, w.tot)}<div class="info alleen-mobiel">norm ${fmt(w.norm_uren)}${bijz ? `, ${bijz}` : ''}</div></td>
               <td class="r num norm-kol">${fmt(w.norm_uren)}</td>
               <td class="r"><input class="tt-invoer num" type="number" inputmode="decimal" step="0.25" min="0" value="${w.timetell_uren ?? ''}" aria-label="Timetell-uren week ${w.weeknr}" data-tt="${w.weeknr}"></td>
-              <td class="r num ${klasseTeken(n(w.verschil))}">${w.verschil == null ? '' : fmtTeken(n(w.verschil))}</td>
+              <td class="r num ${klasseTeken(n(w.verschil))}">${w.verschil != null ? fmtTeken(n(w.verschil))
+                : (w.van <= VANDAAG && w.van >= inst.startdatum && w.norm_uren != null ? `<button class="knop licht klein vul-knop" data-vul="${w.weeknr}" data-norm="${n(w.norm_uren)}" title="Vul de norm in" aria-label="Week ${w.weeknr}: ${fmt(w.norm_uren)} uur invullen">= ${fmt(w.norm_uren)}</button>` : '')}</td>
               <td class="r num ${klasseTeken(n(w.urenbank_cumulatief))}">${w.urenbank_cumulatief == null ? '' : fmtTeken(n(w.urenbank_cumulatief))}</td>
               <td class="info bijz">${bijz}</td></tr>`;
           }).join('')}
@@ -309,6 +348,11 @@ async function toonWeken(main, arg) {
       </table>
     </div>`;
 
+  $$('[data-vul]', main).forEach(b => b.addEventListener('click', async () => {
+    const weeknr = +b.dataset.vul;
+    const ok = await bewaar(() => api.upsert('week_uren', { jaar, weeknr, timetell_uren: Number(b.dataset.norm) }), `Week ${weeknr}: ${fmt(Number(b.dataset.norm))} uur ingevuld`);
+    if (ok) { const y = scrollY; await toonWeken(main, jaar); scrollTo(0, y); }
+  }));
   $$('[data-tt]', main).forEach(inp => inp.addEventListener('change', async () => {
     const weeknr = +inp.dataset.tt, v = n(inp.value);
     const ok = await bewaar(() => (v != null && controleer(v, { min: 0, max: 100, naam: 'de weekuren' }), v == null
@@ -411,9 +455,9 @@ function verlofItem(v) {
   </li>`;
 }
 
-function verlofFormulier(v, jaar) {
+function verlofFormulier(v, jaar, voorinvulling = {}) {
   const nieuw = !v;
-  v = v || { begin: '', eind: '', omschrijving: '', bron: 'saldo', soort_overig: '', uren_handmatig: null, geboekt: false, geboekte_uren: null };
+  v = v || { begin: '', eind: '', omschrijving: '', bron: 'saldo', soort_overig: '', uren_handmatig: null, geboekt: false, geboekte_uren: null, ...voorinvulling };
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<form method="dialog" novalidate>
     <h2 style="margin:0">${nieuw ? 'Verlof plannen' : 'Verlof bewerken'}</h2>
@@ -573,7 +617,7 @@ async function toonJaar(main, arg) {
       <li><span class="stip" style="background:var(--vrij)"></span>Vaste vrije dag</li>
       <li><span class="stip" style="background:var(--surface);box-shadow:inset 0 -3px 0 var(--ink)"></span>Werksessie of info</li>
     </ul>
-    <div class="vlak dag-info" id="dag-info" aria-live="polite"><span class="muted">Kies een dag voor details.</span></div>
+    <div class="vlak dag-info" id="dag-info" aria-live="polite"><span class="muted">Tik op een dag voor details, of op Verlof plannen om je eerste en laatste dag aan te tikken.</span></div>
     <div class="kaart">
       ${perMaand.map((ds, m) => {
         const leeg = ds[0].isodow - 1;
@@ -586,8 +630,29 @@ async function toonJaar(main, arg) {
       }).join('')}
     </div>`;
 
-  $('#plan-hier').addEventListener('click', () => verlofFormulier(null, jaar));
+  // Kiezen van een periode: eerst de eerste dag, dan de laatste dag; daarna opent het formulier
+  let kiesVan = null, kiezen = false;
+  const info = $('#dag-info');
+  const markeer = (van, tot) => $$('.dag[data-d]', main).forEach(x => x.classList.toggle('in-keuze', !!van && x.dataset.d >= van && x.dataset.d <= (tot || van)));
+  const stopKiezen = () => { kiezen = false; kiesVan = null; markeer(null); };
+  const kiesBegin = van => {
+    kiezen = true; kiesVan = van;
+    markeer(van);
+    info.innerHTML = van
+      ? `<strong>Eerste dag: ${dfLang.format(datum(van))}</strong><p class="muted" style="margin:0.25rem 0 0">Tik nu op de laatste dag van je verlof. <button class="knop-tekst" data-stop>Annuleren</button></p>`
+      : `<strong>Verlof plannen</strong><p class="muted" style="margin:0.25rem 0 0">Tik op de eerste dag van je verlof. <button class="knop-tekst" data-stop>Annuleren</button></p>`;
+    $('[data-stop]', info).addEventListener('click', () => { stopKiezen(); info.innerHTML = '<span class="muted">Tik op een dag voor details.</span>'; });
+  };
+  $('#plan-hier').addEventListener('click', () => kiesBegin(null));
+  $$('.dag[data-d]', main).forEach(b => b.addEventListener('mouseenter', () => { if (kiezen && kiesVan) markeer(...[kiesVan, b.dataset.d].sort()); }));
   $$('.dag[data-d]', main).forEach(b => b.addEventListener('click', () => {
+    if (kiezen) {
+      if (!kiesVan) return kiesBegin(b.dataset.d);
+      const [van, tot] = [kiesVan, b.dataset.d].sort();
+      stopKiezen();
+      info.innerHTML = '<span class="muted">Tik op een dag voor details.</span>';
+      return verlofFormulier(null, jaar, { begin: van, eind: tot });
+    }
     $$('.dag.gekozen', main).forEach(x => x.classList.remove('gekozen'));
     b.classList.add('gekozen');
     const d = dagen.find(x => x.datum === b.dataset.d);
@@ -598,15 +663,17 @@ async function toonJaar(main, arg) {
         ${n(d.norm_uren) > 0 ? `<span>${fmt(d.norm_uren)} uur volgens rooster</span>` : d.isodow < 6 && !d.feestdag ? '<span class="muted">Vaste vrije dag</span>' : ''}
         ${v ? `<span class="chip ${esc(v.bron)}">${esc(v.omschrijving)}</span><span class="muted">${periode(v.begin, v.eind)}, ${fmtU(v.kosten_uren)} uur, ${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij</span> <button class="knop-tekst" data-bewerk-dag="${v.id}">Bewerken</button>` : ''}
         ${d.agenda ? `<span>${esc(d.agenda)}</span>` : ''}
+        ${!v ? `<button class="knop-tekst" data-plan-vanaf="${d.datum}">Verlof plannen vanaf deze dag</button>` : ''}
       </div>`;
     $('[data-bewerk-dag]')?.addEventListener('click', () => verlofFormulier(v, jaar));
+    $('[data-plan-vanaf]')?.addEventListener('click', e => kiesBegin(e.target.dataset.planVanaf));
   }));
 }
 
 /* ---------- instellingen ---------- */
 async function toonInstellingen(main) {
   instellingenCache = null;
-  const [inst, roosters, potjes, saldi, fdAfw, agenda, dagenJaar] = await Promise.all([
+  const [inst, roosters, potjes, saldi, fdAfw, agenda, dagenJaar, [feed]] = await Promise.all([
     instellingen(),
     api.list('rooster', { order: 'geldig_vanaf' }),
     api.list('verlof_potje', { order: ['prioriteit', 'id'] }),
@@ -614,7 +681,9 @@ async function toonInstellingen(main) {
     api.list('feestdag_afwijking', { order: 'datum' }),
     api.list('agenda_item', { order: 'begin' }),
     api.rpc('dagen', { van: `${DIT_JAAR}-01-01`, tot: `${DIT_JAAR}-12-31` }),
+    api.list('agenda_feed'),
   ]);
+  const feedUrl = feed ? AGENDA_FEED_URL + feed.token : null;
   const huidigRooster = [...roosters].reverse().find(r => r.geldig_vanaf <= VANDAAG) || roosters[roosters.length - 1];
   const feestdagen = dagenJaar.filter(d => d.feestdag);
   const verval = p => saldi.find(s => s.potje_id === p.id)?.vervalt_op;
@@ -704,6 +773,27 @@ async function toonInstellingen(main) {
         </div>
         <div><button class="knop">Rekenregels opslaan</button></div>
       </form>
+    </div>
+
+    <h2>Verlof in je agenda</h2>
+    <div class="vlak feed">
+      <p style="margin-top:0">Zet je verlof automatisch in Google Agenda (of een andere agenda), in elk Google-account dat je wilt. Alleen verlof van vandaag en later; wijzigingen komen er vanzelf in.</p>
+      ${feedUrl ? `
+        <label class="veld"><span>Jouw agendalink</span><input id="feed-url" readonly value="${esc(feedUrl)}"></label>
+        <div class="rij"><button class="knop" id="feed-kopieer">Kopieer link</button><button class="knop licht" id="feed-nieuw">Nieuwe link maken</button></div>
+        <ol class="feed-stappen">
+          <li>Open <strong>calendar.google.com</strong> op een computer en log in met het account waar je het verlof wilt zien. (In de Google Agenda-app op je telefoon kan dit niet.)</li>
+          <li>Klik links bij <strong>Andere agenda's</strong> op <strong>+</strong> en kies <strong>Via URL</strong>.</li>
+          <li>Plak de link en klik op <strong>Agenda toevoegen</strong>. Daarna staat hij ook op je telefoon.</li>
+        </ol>
+        <p class="info">Google haalt de agenda zelf een paar keer per dag op, dus een wijziging kan enkele uren duren. Houd de link voor jezelf: wie hem heeft, ziet je verlof. Gedeeld per ongeluk? Maak een nieuwe link; de oude werkt dan niet meer.</p>`
+      : `<button class="knop" id="feed-maak">Agendalink maken</button>`}
+    </div>
+
+    <h2>Back-up</h2>
+    <div class="vlak rij tussen">
+      <span>Download al je weken, verlof en potjes als Excel-bestand, voor je eigen administratie.</span>
+      <button class="knop licht" id="export">Download Excel-bestand</button>
     </div>
 
     <h2>Account</h2>
@@ -821,6 +911,31 @@ async function toonInstellingen(main) {
     if (await bewaar(() => api.upsert('instellingen', rij), 'Rekenregels opgeslagen')) { instellingenCache = null; toonInstellingen(main); }
   });
 
+  // agenda-abonnement: de token wordt in de browser met een veilige randomgenerator gemaakt (64 hex-tekens)
+  const nieuweToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
+  $('#feed-maak')?.addEventListener('click', async e => {
+    const knop = e.currentTarget;
+    knop.disabled = true;
+    if (await bewaar(() => api.insert('agenda_feed', { token: nieuweToken() }), 'Agendalink gemaakt')) toonInstellingen(main);
+    else knop.disabled = false;
+  });
+  $('#feed-nieuw')?.addEventListener('click', async () => {
+    if (!confirm('Nieuwe link maken? De oude link werkt dan niet meer; die moet je in je agenda vervangen door de nieuwe.')) return;
+    if (await bewaar(() => api.update('agenda_feed', { user_id: api.uid() }, { token: nieuweToken() }), 'Nieuwe agendalink gemaakt')) toonInstellingen(main);
+  });
+  $('#feed-kopieer')?.addEventListener('click', async () => {
+    const veld = $('#feed-url');
+    try { await navigator.clipboard.writeText(veld.value); melding('Link gekopieerd'); }
+    catch { veld.focus(); veld.select(); melding('Kopiëren lukt hier niet automatisch: de link is geselecteerd, kopieer hem zelf.', true); }
+  });
+
+  $('#export').addEventListener('click', async e => {
+    const knop = e.currentTarget;
+    knop.disabled = true;
+    try { await exporteer(); melding('Excel-bestand gedownload'); }
+    catch (err) { melding(`Exporteren lukt niet: ${begrijpelijk(err)}`, true); }
+    finally { knop.disabled = false; }
+  });
   $('#uitloggen').addEventListener('click', async () => {
     try { await api.signOut(); } catch (e) { return melding(begrijpelijk(e), true); }
     instellingenCache = null;
@@ -860,6 +975,42 @@ function potjeFormulier(p, main) {
   });
   dlg.showModal();
   f.uren.focus();
+}
+
+/* ---------- export ---------- */
+async function exporteer() {
+  if (!window.XLSX) {
+    await new Promise((ok, fout) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      // Vaste versie met integriteitscontrole: een gewijzigd bestand op de CDN wordt geweigerd.
+      sc.integrity = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
+      sc.crossOrigin = 'anonymous';
+      sc.onload = ok;
+      sc.onerror = () => fout(new Error('Failed to fetch'));
+      document.head.append(sc);
+    });
+  }
+  const [weken, verlof, potjes] = await Promise.all([
+    api.rpc('weekoverzicht'), api.rpc('verlof_overzicht'), api.rpc('potje_saldi', { incl_gepland: false }),
+  ]);
+  const getal = v => (v == null ? null : Number(v));
+  const wb = XLSX.utils.book_new();
+  const blad = (rijen, naam) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rijen), naam);
+  blad(weken.filter(w => w.timetell_uren != null).map(w => ({
+    Jaar: w.jaar, Week: w.weeknr, Van: w.van, Tot: w.tot, Norm: getal(w.norm_uren), Timetell: getal(w.timetell_uren),
+    Verschil: getal(w.verschil), Urenbank: getal(w.urenbank_cumulatief), Feestdagen: w.feestdagen || '', Verlof: w.verlof || '',
+  })), 'Weken');
+  blad(verlof.map(v => ({
+    Omschrijving: v.omschrijving, Van: v.begin, Tot: v.eind, 'Betaald uit': BRON[v.bron], Soort: v.soort_overig || '',
+    Werkdagen: v.werkdagen, Uren: getal(v.kosten_uren), 'Geboekt bij P&O': v.bron === 'urenbank' ? 'n.v.t.' : v.geboekt ? 'ja' : 'nee',
+    'Geboekte uren': getal(v.geboekte_uren), 'Dagen aaneengesloten vrij': v.dagen_aansluitend_vrij, 'Valt over': v.overlapt_met || '',
+  })), 'Verlof');
+  blad(potjes.map(p => ({
+    Potje: potjeNaam(p), Begin: getal(p.begin_uren), Opgenomen: getal(p.opgenomen), Rest: getal(p.rest),
+    'Beschikbaar vanaf': p.beschikbaar_vanaf || '', Vervalt: p.vervalt_op || '',
+  })), 'Potjes');
+  XLSX.writeFile(wb, `urenbank-${VANDAAG}.xlsx`);
 }
 
 /* ---------- login en start ---------- */

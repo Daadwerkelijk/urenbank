@@ -5,7 +5,7 @@
 -- Uitvoeren: via execute_sql (Supabase MCP) of in de Supabase SQL Editor.
 -- Bewust zonder drop, delete en update zonder where: die vragen via de MCP om een bevestiging.
 -- Opruimen gebeurt door de rollback.
--- Vereist migratie 004.
+-- Vereist migratie 007.
 
 begin;
 
@@ -128,8 +128,50 @@ exception when others then
   if sqlerrm like 'ROOD:%' then raise; end if;
 end $$;
 
+-- Agenda-abonnement (migratie 006): geheime link toont eigen verlof vanaf de peildatum, geen historie
+insert into urenbank.verlof (begin, eind, omschrijving, bron, geboekt) values ('2026-03-02', '2026-03-03', 'Voorbij', 'saldo', true);
+insert into urenbank.agenda_feed default values;
+select set_config('test.token', (select token from urenbank.agenda_feed), true);
+select set_config('test.verwacht', (select count(*)::text from urenbank.verlof_overzicht() where eind >= '2026-10-23'), true);
+select pg_temp.verwacht('Vanaf 23-10 alleen Kerst in beeld', '1', current_setting('test.verwacht'));
+select pg_temp.verwacht('Token is 64 tekens hex', true, current_setting('test.token') ~ '^[0-9a-f]{64}$');
+do $$ begin
+  update urenbank.agenda_feed set token = 'zwak' where user_id = '00000000-0000-0000-0000-0000000000a1';
+  raise exception 'ROOD: Zwakke token wordt geweigerd — geen fout gekregen';
+exception when others then
+  if sqlerrm like 'ROOD:%' then raise; end if;
+end $$;
+do $$ begin
+  perform urenbank.agenda_items(current_setting('test.token'), '2026-10-23');
+  raise exception 'ROOD: Ingelogde gebruiker mag agenda_items niet zelf aanroepen — geen fout gekregen';
+exception when others then
+  if sqlerrm like 'ROOD:%' then raise; end if;
+end $$;
+reset role;
+set local role service_role;
+select pg_temp.verwacht('Feed: eigen verlof vanaf peildatum', current_setting('test.verwacht')::bigint,
+  (select count(*) from urenbank.agenda_items(current_setting('test.token'), '2026-10-23')));
+select pg_temp.verwacht('Feed: geen historie', false,
+  exists (select 1 from urenbank.agenda_items(current_setting('test.token'), '2026-10-23') where eind < '2026-10-23'));
+select pg_temp.verwacht('Feed: verkeerde token geeft niets', 0::bigint,
+  (select count(*) from urenbank.agenda_items(repeat('0', 64), '2026-10-23')));
+select pg_temp.verwacht('Feed: ongeldige token geeft niets', 0::bigint,
+  (select count(*) from urenbank.agenda_items('x'' or 1=1', '2026-10-23')));
+reset role;
+set local role authenticated;
+
 -- Rijbeveiliging: een andere gebruiker ziet niets
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b2","role":"authenticated"}', true);
+select set_config('request.jwt.claim.sub', '', true); -- door agenda_items gezet; in de app is elk verzoek een eigen transactie
+select pg_temp.verwacht('Andere gebruiker ziet geen agendalink', 0::bigint, (select count(*) from urenbank.agenda_feed));
+insert into urenbank.agenda_feed default values;
+select set_config('test.token_b', (select token from urenbank.agenda_feed), true);
+reset role;
+set local role service_role;
+select pg_temp.verwacht('Feed van andere gebruiker bevat geen verlof van de eerste', 0::bigint,
+  (select count(*) from urenbank.agenda_items(current_setting('test.token_b'), '2026-01-01')));
+reset role;
+set local role authenticated;
 select pg_temp.verwacht('Andere gebruiker ziet geen verlof', 0::bigint, (select count(*) from urenbank.verlof));
 
 select 'ALLES GROEN' as resultaat;

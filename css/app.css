@@ -333,3 +333,22 @@ dialog form { padding: 1.25rem; display: grid; gap: 1rem; }
 .verval-cel { gap: 0.4rem; }
 .verval-cel .num { min-width: 6rem; }
 .ikoon-knop { width: 2rem; height: 2rem; padding: 0; flex: none; }
+
+/* Weekuren met één tik */
+.vul-knop { font-size: 0.78rem; padding: 0.15rem 0.5rem; white-space: nowrap; }
+/* Jaarkaart: gekozen periode */
+.dag.in-keuze { outline: 2px solid var(--focus); outline-offset: 0; }
+/* Jaarovergang */
+.overgang { margin-top: 1.25rem; border-color: var(--bank); border-width: 2px; }
+.overgang-lijst { margin: 0 0 1rem; padding-left: 1.25rem; display: grid; gap: 0.6rem; }
+.overgang-lijst > li { padding-left: 0.25rem; }
+.overgang-lijst > li > strong { display: block; }
+.overgang-lijst > li.goed::marker { color: var(--plus); }
+.overgang-lijst > li.open::marker { color: var(--bank); }
+.overgang-potjes { margin: 0.35rem 0 0; padding-left: 1rem; color: var(--muted); }
+
+/* agenda-abonnement */
+.feed { display: grid; gap: 0.75rem; }
+.feed p { margin: 0; }
+.feed #feed-url { width: 100%; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+.feed-stappen { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.4rem; }

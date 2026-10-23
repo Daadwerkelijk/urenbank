@@ -61,8 +61,16 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
 - `manifest.webmanifest`, `icons/` — PWA
 - `supabase/migrations/` — `001` schema + RLS, `002` rekenfuncties,
   `003` jaarcontroles (2000–2100), `004` urenbank per jaar, samenvatting
-  met peildatum, `verlof_overzicht` (met overlap). Nieuwe wijzigingen
-  altijd in een nieuw genummerd bestand.
+  met peildatum, `verlof_overzicht` (met overlap), `005` jaarovergang
+  afgerond (`instellingen.jaarovergang_klaar`), `006` agenda-abonnement
+  (`agenda_feed` + `agenda_items`, alleen voor `service_role`), `007`
+  tokenformaat-check en `request.jwt.claim.sub`. Nieuwe
+  wijzigingen altijd in een nieuw genummerd bestand.
+- `supabase/functions/urenbank-agenda/` — Edge Function (verify_jwt uit):
+  geeft met `?token=` een .ics met verlof vanaf vandaag (geen historie);
+  onbekende token = lege agenda. Uitrollen via `deploy_edge_function`.
+  De functie `dynamic-action` in hetzelfde project hoort bij een andere
+  app: niet aanraken.
 - `tests/sql/rekenregels.sql` — rekenregeltests (transactie + rollback,
   verzonnen getallen). Claude draait ze zelf via `execute_sql`.
 - `tests/demo-gelijkloop.mjs` — zelfde scenario tegen `js/demo.js` (Node)
@@ -76,6 +84,11 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
 - Elke tabel: `user_id default auth.uid()`, RLS aan, policy
   `eigen_rijen`; geen rechten voor `anon`. Functies: `security invoker`,
   `set search_path = ''`, `execute` alleen voor `authenticated`.
+  Enige uitzondering: `agenda_items` (security definer, alleen
+  `service_role`, voor de agendafeed). Omdat RLS daarbinnen niet geldt,
+  moet elke functie die het aanroept (`verlof_overzicht`, `dagen` en
+  hulpfuncties) zelf expliciet op `user_id = auth.uid()` filteren. De
+  feedtest "andere gebruiker" in `rekenregels.sql` blijft altijd staan.
 - **Inloggen**: met e-maillink (`signInWithOtp`, geen nieuwe accounts).
   De gebruiker wil met zijn eigen e-mailadres inloggen en zijn wachtwoord
   níet wijzigen, omdat hetzelfde account in zijn andere apps wordt

@@ -24,6 +24,7 @@ const store = {
     { id: 3, user_id: 'demo', begin: `${JAAR}-10-17`, eind: `${JAAR}-10-25`, omschrijving: 'Herfstvakantie school', soort: 'schoolvakantie' },
   ],
   week_uren: [],
+  agenda_feed: [],
   verlof_potje: [
     { id: 4, user_id: 'demo', soort: 'bovenwettelijk', opbouwjaar: JAAR - 1, uren: 30, correctie: 0, beschikbaar_vanaf: `${JAAR - 1}-01-01`, vervalt_op: null, prioriteit: 1, toelichting: 'Beginsaldo' },
     { id: 5, user_id: 'demo', soort: 'wettelijk', opbouwjaar: JAAR, uren: 144, correctie: 0, beschikbaar_vanaf: `${JAAR}-01-01`, vervalt_op: null, prioriteit: 2, toelichting: null },
@@ -212,7 +213,7 @@ function nieuwJaar({ p_jaar }) {
   });
 })();
 
-const PK = { instellingen: ['user_id'], dag_afwijking: ['datum'], feestdag_afwijking: ['datum'], week_uren: ['jaar', 'weeknr'] };
+const PK = { instellingen: ['user_id'], agenda_feed: ['user_id'], dag_afwijking: ['datum'], feestdag_afwijking: ['datum'], week_uren: ['jaar', 'weeknr'] };
 const matches = (row, match) => Object.entries(match).every(([k, v]) => String(row[k]) === String(v));
 const clone = x => JSON.parse(JSON.stringify(x));
 
@@ -249,8 +250,10 @@ export const demoApi = {
     return [clone(row)];
   },
   async update(table, match, patch) {
-    store[table].filter(r => matches(r, match)).forEach(r => Object.assign(r, patch));
-    return [];
+    const rijen = store[table].filter(r => matches(r, match));
+    if (!rijen.length) throw new Error('Niets gewijzigd: deze regel bestaat niet meer. Ververs de pagina.');
+    rijen.forEach(r => Object.assign(r, patch));
+    return clone(rijen);
   },
   async remove(table, match) {
     store[table] = store[table].filter(r => !matches(r, match));

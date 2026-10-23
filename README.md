@@ -42,3 +42,4 @@ Alle berekeningen staan in de database (`supabase/migrations/002_urenbank_functi
 2. Zet in Supabase bij **Project Settings → Data API → Exposed schemas** het schema `urenbank` aan.
 3. Zet je project-URL en publishable key in `js/config.js`.
 4. Maak een gebruiker aan en vul bij Instellingen je rooster en verlofpotjes in.
+5. Optioneel, verlof in je agenda: rol de Edge Function `supabase/functions/urenbank-agenda` uit zonder JWT-controle (`supabase functions deploy urenbank-agenda --no-verify-jwt`). Bij Instellingen → "Verlof in je agenda" maak je dan een geheime link om in Google Agenda toe te voegen via "Andere agenda's → + → Via URL".

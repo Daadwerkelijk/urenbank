@@ -24,6 +24,11 @@ demo (`?demo`), lezen mag in de live-app. Zie skill `rooktest`.
 - [ ] **Jaarkaart**: feestdagen, vaste vrije dagen, verlof (geboekt en gepland) zichtbaar; dag aanklikken toont details
 - [ ] **Instellingen**: rooster opslaan; potje uren wijzigen → saldo verandert; volgorde ▲/▼; gekocht verlof toevoegen; feestdag toevoegen en verwijderen
 - [ ] **Jaar wisselen** (‹ ›) op Weken, Verlof en Jaarkaart
+- [ ] **Zoals gepland invullen**: op Overzicht (lege huidige week) en met "= 36" in Weken; urenbank verandert niet
+- [ ] **Periode kiezen op de jaarkaart**: "Plan hier" → eerste en laatste dag (ook omgekeerd) → formulier met juiste data
+- [ ] **Jaarovergang** (klok op 2 januari): blok staat op Overzicht, blijft na verversen, verdwijnt na "Klopt, afgerond"
+- [ ] **Excel-export**: bestand met tabbladen Weken, Verlof en Potjes
+- [ ] **Agendalink**: maken, kopiëren, nieuwe link maken (oude verandert)
 
 ## Aandachtspunten
 - [ ] Telefoon (390 breed): geen horizontaal scrollen op enig scherm; menu onderaan
@@ -36,6 +41,7 @@ demo (`?demo`), lezen mag in de live-app. Zie skill `rooktest`.
 - [ ] App op beginscherm zetten en openen
 - [ ] Inloglink uit de mail opent de app en logt in
 - [ ] Na een deploy de nieuwe versie zien (eventueel twee keer verversen)
+- [ ] Instellingen → "Verlof in je agenda": link maken, in Google Agenda toevoegen via URL; komend verlof verschijnt (kan enkele uren duren), oud verlof niet
 
 ## Resultaat
 Datum: ______ Getest door: ______ Bevindingen: ______
