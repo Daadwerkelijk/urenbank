@@ -310,3 +310,26 @@ dialog form { padding: 1.25rem; display: grid; gap: 1rem; }
   .nav { gap: 0; padding-left: 0.15rem; padding-right: 0.15rem; }
   .nav a { font-size: 0.7rem; padding: 0.4rem 0.3rem; }
 }
+
+/* Verlofpotjes: elke rij één regel hoog, kolommen netjes onder elkaar */
+.potjes-tabel td, .potjes-tabel th { white-space: nowrap; vertical-align: middle; }
+.potjes-tabel .soort { font-weight: 550; }
+.potjes-tabel .tt-invoer { height: 2.25rem; }
+.potjes-tabel .tt-invoer.num { width: 5.5rem; }
+.potjes-tabel .tt-invoer.datum { width: 9.75rem; text-align: left; }
+.potjes-tabel .toelichting { width: 100%; }
+.potjes-tabel .toelichting .tt-invoer { width: 100%; min-width: 10rem; text-align: left; text-overflow: ellipsis; }
+.verval-cel { display: flex; align-items: center; gap: 0.6rem; min-height: 2.25rem; }
+.verval-cel .num { min-width: 6.5rem; }
+.knop-tekst.gevaar-tekst { color: var(--min); }
+.verborgen-tekst { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.potjes-tabel th, .potjes-tabel td { padding-left: 0.5rem; padding-right: 0.5rem; }
+.potjes-tabel th { white-space: normal; }
+.potjes-tabel .tt-invoer.num { width: 4.75rem; }
+.potjes-tabel .tt-invoer.datum { width: 9.25rem; }
+.potjes-tabel .toelichting .tt-invoer { min-width: 8rem; }
+.wis-knop { color: var(--min); border-color: var(--line-strong); width: 2rem; height: 2rem; padding: 0; }
+.potjes-tabel .toelichting .tt-invoer { min-width: 7rem; }
+.verval-cel { gap: 0.4rem; }
+.verval-cel .num { min-width: 6rem; }
+.ikoon-knop { width: 2rem; height: 2rem; padding: 0; flex: none; }

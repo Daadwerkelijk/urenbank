@@ -636,21 +636,23 @@ async function toonInstellingen(main) {
 
     <h2>Verlofpotjes</h2>
     <div class="vlak">
-      <p class="info" style="margin-top:0">Neem de potjes over uit je P&amp;O-overzicht: het beginsaldo op je startdatum, of het toegekende of gekochte aantal. Opgenomen verlof gaat eraf van boven naar beneden; verschuif een potje om de volgorde te wijzigen. Laat Vervalt leeg om de standaardregel te gebruiken.</p>
+      <p class="info" style="margin-top:0">Neem de potjes over uit je P&amp;O-overzicht: het beginsaldo op je startdatum, of het toegekende of gekochte aantal. Opgenomen verlof gaat eraf van boven naar beneden; verschuif een potje om de volgorde te wijzigen. De vervaldatum volgt de standaardregel; kies Aanpassen voor een eigen datum.</p>
       <div class="tabel-wrap" style="border:none">
-        <table>
-          <thead><tr><th>Volgorde</th><th>Soort</th><th class="r">Uren</th><th class="r">Correctie</th><th>Beschikbaar vanaf</th><th>Vervalt (leeg = standaard)</th><th>Toelichting</th><th></th></tr></thead>
+        <table class="potjes-tabel">
+          <thead><tr><th>Volgorde</th><th>Soort</th><th class="r">Uren</th><th class="r">Correctie</th><th>Beschikbaar vanaf</th><th>Vervalt</th><th>Toelichting</th><th><span class="verborgen-tekst">Verwijderen</span></th></tr></thead>
           <tbody>${potjes.map((p, i) => `<tr data-potje="${p.id}">
             <td><div class="potje-acties">
               <button class="knop licht klein" data-omhoog="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Eerder afschrijven">▲</button>
               <button class="knop licht klein" data-omlaag="${i}" ${i === potjes.length - 1 ? 'disabled' : ''} aria-label="Later afschrijven">▼</button></div></td>
-            <td>${esc(potjeNaam(p))}</td>
+            <td class="soort">${esc(potjeNaam(p))}</td>
             <td class="r"><input class="tt-invoer num" type="number" step="0.01" data-veld="uren" value="${n(p.uren)}" aria-label="Uren ${esc(potjeNaam(p))}"></td>
             <td class="r"><input class="tt-invoer num" type="number" step="0.01" data-veld="correctie" value="${n(p.correctie)}" aria-label="Correctie ${esc(potjeNaam(p))}"></td>
-            <td><input class="tt-invoer" style="width:9.5rem;text-align:left" type="date" data-veld="beschikbaar_vanaf" value="${p.beschikbaar_vanaf}"></td>
-            <td><input class="tt-invoer" style="width:9.5rem;text-align:left" type="date" data-veld="vervalt_op" value="${p.vervalt_op || ''}"><div class="info">${!p.vervalt_op && verval(p) ? `standaard ${kort(verval(p))} ${jaarVan(verval(p))}` : ''}</div></td>
-            <td><input class="tt-invoer" style="width:12rem;text-align:left" data-veld="toelichting" value="${esc(p.toelichting)}"></td>
-            <td><button class="knop-tekst" data-wis-potje="${p.id}">Verwijderen</button></td></tr>`).join('')}
+            <td><input class="tt-invoer datum" type="date" data-veld="beschikbaar_vanaf" value="${p.beschikbaar_vanaf}" aria-label="Beschikbaar vanaf ${esc(potjeNaam(p))}"></td>
+            <td><div class="verval-cel">${p.vervalt_op
+              ? `<input class="tt-invoer datum" type="date" data-veld="vervalt_op" value="${p.vervalt_op}" aria-label="Eigen vervaldatum ${esc(potjeNaam(p))}"><button class="knop licht klein ikoon-knop" data-verval-standaard="${p.id}" title="Terug naar standaard" aria-label="Vervaldatum ${esc(potjeNaam(p))} terug naar standaard">↺</button>`
+              : `<span class="num">${verval(p) ? `${kort(verval(p))} ${jaarVan(verval(p))}` : '–'}</span><button class="knop-tekst" data-verval-aanpassen="${p.id}" aria-label="Vervaldatum ${esc(potjeNaam(p))} aanpassen">Aanpassen</button>`}</div></td>
+            <td class="toelichting"><input class="tt-invoer" data-veld="toelichting" value="${esc(p.toelichting)}" title="${esc(p.toelichting)}" aria-label="Toelichting ${esc(potjeNaam(p))}"></td>
+            <td><button class="knop licht klein wis-knop" data-wis-potje="${p.id}" title="Potje verwijderen" aria-label="${esc(potjeNaam(p))} verwijderen">✕</button></td></tr>`).join('')}
           </tbody>
         </table>
       </div>
@@ -748,6 +750,21 @@ async function toonInstellingen(main) {
   };
   $$('[data-omhoog]', main).forEach(b => b.addEventListener('click', () => wissel(+b.dataset.omhoog, +b.dataset.omhoog - 1)));
   $$('[data-omlaag]', main).forEach(b => b.addEventListener('click', () => wissel(+b.dataset.omlaag, +b.dataset.omlaag + 1)));
+  $$('[data-verval-standaard]', main).forEach(b => b.addEventListener('click', async () => {
+    if (await bewaar(() => api.update('verlof_potje', { id: +b.dataset.vervalStandaard }, { vervalt_op: null }), 'Standaard vervaldatum hersteld')) toonInstellingen(main);
+  }));
+  $$('[data-verval-aanpassen]', main).forEach(b => b.addEventListener('click', () => {
+    const p = potjes.find(x => x.id === +b.dataset.vervalAanpassen);
+    const cel = b.closest('.verval-cel');
+    cel.innerHTML = `<input class="tt-invoer datum" type="date" value="${verval(p) || ''}" aria-label="Eigen vervaldatum ${esc(potjeNaam(p))}"><button class="knop licht klein ikoon-knop" data-annuleer title="Annuleren" aria-label="Annuleren">✕</button>`;
+    const inp = $('input', cel);
+    inp.focus();
+    inp.addEventListener('change', async () => {
+      if (!inp.value) return;
+      if (await bewaar(() => api.update('verlof_potje', { id: p.id }, { vervalt_op: inp.value }), 'Eigen vervaldatum opgeslagen')) toonInstellingen(main);
+    });
+    $('[data-annuleer]', cel).addEventListener('click', () => toonInstellingen(main));
+  }));
   $$('[data-wis-potje]', main).forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Dit potje verwijderen? Het saldo wordt opnieuw berekend.')) return;
     if (await bewaar(() => api.remove('verlof_potje', { id: +b.dataset.wisPotje }), 'Potje verwijderd')) toonInstellingen(main);
