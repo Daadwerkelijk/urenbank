@@ -17,6 +17,8 @@ const plusDagen = (s, k) => { const d = datum(s); d.setDate(d.getDate() + k); re
 const VANDAAG = iso(new Date());
 const DIT_JAAR = new Date().getFullYear();
 const dfKort = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'short' });
+const hoofdletter = t => t.charAt(0).toUpperCase() + t.slice(1);
+const dfDagKort = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 const dfLang = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const dfMaand = new Intl.DateTimeFormat('nl-NL', { month: 'long' });
 const kort = s => dfKort.format(datum(s)).replace('.', '');
@@ -455,6 +457,12 @@ function verlofItem(v) {
   </li>`;
 }
 
+// Na opslaan of verwijderen: blijf op de jaarkaart als je daar was, anders naar de verlofpagina van dat jaar.
+function naVerlofWijziging(jaar) {
+  const doel = `#/${location.hash.startsWith('#/jaar') ? 'jaar' : 'verlof'}/${jaar}`;
+  if (location.hash === doel) router(); else location.hash = doel;
+}
+
 function verlofFormulier(v, jaar, voorinvulling = {}) {
   const nieuw = !v;
   v = v || { begin: '', eind: '', omschrijving: '', bron: 'saldo', soort_overig: '', uren_handmatig: null, geboekt: false, geboekte_uren: null, ...voorinvulling };
@@ -538,7 +546,7 @@ function verlofFormulier(v, jaar, voorinvulling = {}) {
   dlg.addEventListener('cancel', () => setTimeout(() => dlg.remove(), 0));
   $('#verwijder', f)?.addEventListener('click', async () => {
     if (!confirm(`"${v.omschrijving}" verwijderen?`)) return;
-    if (await bewaar(() => api.remove('verlof', { id: v.id }), 'Verlof verwijderd')) { sluit(); toonVerlof($('#inhoud'), jaar); }
+    if (await bewaar(() => api.remove('verlof', { id: v.id }), 'Verlof verwijderd')) { sluit(); naVerlofWijziging(jaar); }
   });
   f.addEventListener('submit', async e => {
     e.preventDefault();
@@ -566,13 +574,14 @@ function verlofFormulier(v, jaar, voorinvulling = {}) {
       geboekte_uren: bron !== 'urenbank' && f.geboekt.checked ? n(f.geboekte_uren.value) : null,
     };
     const ok = await bewaar(() => (nieuw ? api.insert('verlof', rij) : api.update('verlof', { id: v.id }, rij)), nieuw ? 'Verlof opgeslagen' : 'Wijzigingen opgeslagen');
-    if (ok) { sluit(); toonVerlof($('#inhoud'), jaarVan(rij.begin)); location.hash = `#/verlof/${jaarVan(rij.begin)}`; }
+    if (ok) { sluit(); naVerlofWijziging(jaarVan(rij.begin)); }
   });
   dlg.showModal();
   f.omschrijving.focus();
 }
 
 /* ---------- jaarkaart ---------- */
+let jaarkaartLuisteraars = null; // AbortController: luisteraars op document van de vorige jaarkaart opruimen
 async function toonJaar(main, arg) {
   const jaar = geldigJaar(+arg || DIT_JAAR);
   const dagen = await api.rpc('dagen', { van: `${jaar}-01-01`, tot: `${jaar}-12-31` });
@@ -617,7 +626,7 @@ async function toonJaar(main, arg) {
       <li><span class="stip" style="background:var(--vrij)"></span>Vaste vrije dag</li>
       <li><span class="stip" style="background:var(--surface);box-shadow:inset 0 -3px 0 var(--ink)"></span>Werksessie of info</li>
     </ul>
-    <div class="vlak dag-info" id="dag-info" aria-live="polite"><span class="muted">Tik op een dag voor details, of op Verlof plannen om je eerste en laatste dag aan te tikken.</span></div>
+    <p class="muted kaart-hint">Tik op een dag voor details. Verlof plannen: tik op <strong>Verlof plannen</strong> en daarna op je eerste en laatste dag${matchMedia('(pointer: fine)').matches ? ', of sleep met de muis over de dagen' : ''}.</p>
     <div class="kaart">
       ${perMaand.map((ds, m) => {
         const leeg = ds[0].isodow - 1;
@@ -628,46 +637,124 @@ async function toonJaar(main, arg) {
             ${ds.map(d => `<button class="${klasse(d)}" data-d="${d.datum}" aria-label="${esc(label(d))}">${+d.datum.slice(8)}</button>`).join('')}
           </div></section>`;
       }).join('')}
-    </div>`;
+    </div>
+    <div class="vlak dag-balk" id="dag-balk" role="region" aria-label="Gekozen dag of periode" hidden></div>
+    <p class="voor-schermlezer" id="balk-status" aria-live="polite"></p>`;
 
-  // Kiezen van een periode: eerst de eerste dag, dan de laatste dag; daarna opent het formulier
-  let kiesVan = null, kiezen = false;
-  const info = $('#dag-info');
-  const markeer = (van, tot) => $$('.dag[data-d]', main).forEach(x => x.classList.toggle('in-keuze', !!van && x.dataset.d >= van && x.dataset.d <= (tot || van)));
-  const stopKiezen = () => { kiezen = false; kiesVan = null; markeer(null); };
-  const kiesBegin = van => {
-    kiezen = true; kiesVan = van;
-    markeer(van);
-    info.innerHTML = van
-      ? `<strong>Eerste dag: ${dfLang.format(datum(van))}</strong><p class="muted" style="margin:0.25rem 0 0">Tik nu op de laatste dag van je verlof. <button class="knop-tekst" data-stop>Annuleren</button></p>`
-      : `<strong>Verlof plannen</strong><p class="muted" style="margin:0.25rem 0 0">Tik op de eerste dag van je verlof. <button class="knop-tekst" data-stop>Annuleren</button></p>`;
-    $('[data-stop]', info).addEventListener('click', () => { stopKiezen(); info.innerHTML = '<span class="muted">Tik op een dag voor details.</span>'; });
+  // Onderin een balk die altijd in beeld blijft: details van een dag, of de periode die je kiest.
+  // Toestand: null (niets), {dag}, {kiezen: true, van, tot}. Annuleren kan altijd: ✕, Annuleren of Esc.
+  const balk = $('#dag-balk');
+  const dagKnoppen = $$('.dag[data-d]', main);
+  let staat = null;
+  const kortDag = d => dfDagKort.format(datum(d));
+  const markeer = (van, tot) => dagKnoppen.forEach(x => x.classList.toggle('in-keuze', !!van && x.dataset.d >= van && x.dataset.d <= (tot || van)));
+  const werkdagen = (van, tot) => dagen.filter(d => d.datum >= van && d.datum <= tot && n(d.norm_uren) > 0).length;
+  const sluitKnop = '<button class="knop licht klein ikoon-knop balk-sluit" data-sluit aria-label="Sluiten" title="Sluiten (Esc)">✕</button>';
+
+  // Ruimte onderaan de pagina en de plek van meldingen volgen de echte hoogte van de balk.
+  const ruimte = () => {
+    document.body.classList.toggle('balk-open', !balk.hidden);
+    document.body.style.setProperty('--balk-h', balk.hidden ? '0px' : `${balk.offsetHeight}px`);
   };
-  $('#plan-hier').addEventListener('click', () => kiesBegin(null));
-  $$('.dag[data-d]', main).forEach(b => b.addEventListener('mouseenter', () => { if (kiezen && kiesVan) markeer(...[kiesVan, b.dataset.d].sort()); }));
-  $$('.dag[data-d]', main).forEach(b => b.addEventListener('click', () => {
-    if (kiezen) {
-      if (!kiesVan) return kiesBegin(b.dataset.d);
-      const [van, tot] = [kiesVan, b.dataset.d].sort();
-      stopKiezen();
-      info.innerHTML = '<span class="muted">Tik op een dag voor details.</span>';
-      return verlofFormulier(null, jaar, { begin: van, eind: tot });
+  let laatsteDag = null;
+  const toon = (nieuw, toetsenbord = false) => {
+    const focusInBalk = balk.contains(document.activeElement);
+    staat = nieuw;
+    dagKnoppen.forEach(x => {
+      const aan = !!staat?.dag && x.dataset.d === staat.dag;
+      x.classList.toggle('gekozen', aan);
+      if (aan) x.setAttribute('aria-pressed', 'true'); else x.removeAttribute('aria-pressed');
+    });
+    markeer(staat?.kiezen ? staat.van : null, staat?.kiezen ? staat.tot : null);
+    if (!staat) {
+      balk.hidden = true; balk.innerHTML = ''; ruimte();
+      $('#balk-status').textContent = '';
+      if (focusInBalk && laatsteDag) laatsteDag.focus({ preventScroll: true });
+      return;
     }
-    $$('.dag.gekozen', main).forEach(x => x.classList.remove('gekozen'));
-    b.classList.add('gekozen');
-    const d = dagen.find(x => x.datum === b.dataset.d);
-    const v = d.verlof_id ? status.get(d.verlof_id) : null;
-    $('#dag-info').innerHTML = `<strong style="text-transform:capitalize">${dfLang.format(datum(d.datum))}</strong>
-      <div class="rij" style="gap:0.5rem;margin-top:0.35rem">
-        ${d.feestdag ? `<span class="chip feest">${esc(d.feestdag)}</span>` : ''}
-        ${n(d.norm_uren) > 0 ? `<span>${fmt(d.norm_uren)} uur volgens rooster</span>` : d.isodow < 6 && !d.feestdag ? '<span class="muted">Vaste vrije dag</span>' : ''}
-        ${v ? `<span class="chip ${esc(v.bron)}">${esc(v.omschrijving)}</span><span class="muted">${periode(v.begin, v.eind)}, ${fmtU(v.kosten_uren)} uur, ${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij</span> <button class="knop-tekst" data-bewerk-dag="${v.id}">Bewerken</button>` : ''}
-        ${d.agenda ? `<span>${esc(d.agenda)}</span>` : ''}
-        ${!v ? `<button class="knop-tekst" data-plan-vanaf="${d.datum}">Verlof plannen vanaf deze dag</button>` : ''}
-      </div>`;
-    $('[data-bewerk-dag]')?.addEventListener('click', () => verlofFormulier(v, jaar));
-    $('[data-plan-vanaf]')?.addEventListener('click', e => kiesBegin(e.target.dataset.planVanaf));
-  }));
+    balk.hidden = false;
+    if (staat.dag) {
+      const d = dagen.find(x => x.datum === staat.dag);
+      const v = d.verlof_id ? status.get(d.verlof_id) : null;
+      balk.innerHTML = `<div class="balk-kop"><strong>${hoofdletter(dfLang.format(datum(d.datum)))}</strong>${sluitKnop}</div>
+        <div class="rij balk-info">
+          ${d.feestdag ? `<span class="chip feest">${esc(d.feestdag)}</span>` : ''}
+          ${n(d.norm_uren) > 0 ? `<span>${fmt(d.norm_uren)} uur volgens rooster</span>` : d.isodow < 6 && !d.feestdag ? '<span class="muted">Vaste vrije dag</span>' : ''}
+          ${v ? `<span class="chip ${esc(v.bron)}">${esc(v.omschrijving)}</span><span class="muted">${periode(v.begin, v.eind)}, ${fmtU(v.kosten_uren)} uur, ${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij</span>` : ''}
+          ${d.agenda ? `<span>${esc(d.agenda)}</span>` : ''}
+        </div>
+        <div class="rij balk-knoppen">${v ? '<button class="knop" data-bewerk>Verlof bewerken</button>' : '<button class="knop" data-plan-vanaf>Verlof plannen vanaf hier</button>'}</div>`;
+      $('[data-bewerk]', balk)?.addEventListener('click', () => { toon(null); verlofFormulier(v, jaar); });
+      $('[data-plan-vanaf]', balk)?.addEventListener('click', () => toon({ kiezen: true, van: d.datum, tot: null }));
+    } else if (!staat.van) {
+      balk.innerHTML = `<div class="balk-kop"><strong>Verlof plannen</strong>${sluitKnop}</div>
+        <p class="balk-info">Tik op de <strong>eerste dag</strong> van je verlof.</p>
+        <div class="rij balk-knoppen"><button class="knop licht" data-sluit>Annuleren</button></div>`;
+    } else if (!staat.tot) {
+      balk.innerHTML = `<div class="balk-kop"><strong>Van ${kortDag(staat.van)}</strong>${sluitKnop}</div>
+        <p class="balk-info">Tik op de <strong>laatste dag</strong> van je verlof.</p>
+        <div class="rij balk-knoppen"><button class="knop" data-een>Alleen deze dag</button><button class="knop licht" data-sluit>Annuleren</button></div>`;
+      $('[data-een]', balk).addEventListener('click', () => toon({ ...staat, tot: staat.van }));
+    } else {
+      const wd = werkdagen(staat.van, staat.tot);
+      balk.innerHTML = `<div class="balk-kop"><strong>${staat.van === staat.tot ? kortDag(staat.van) : `${kortDag(staat.van)} t/m ${kortDag(staat.tot)}`}</strong>${sluitKnop}</div>
+        <p class="balk-info muted">${wd === 1 ? '1 werkdag' : `${wd} werkdagen`}. Tik op een andere dag om de periode aan te passen.</p>
+        <div class="rij balk-knoppen"><button class="knop" data-verder>Verder</button><button class="knop licht" data-sluit>Annuleren</button></div>`;
+      $('[data-verder]', balk).addEventListener('click', () => { const { van, tot } = staat; toon(null); verlofFormulier(null, jaar, { begin: van, eind: tot }); });
+    }
+    $$('[data-sluit]', balk).forEach(k => k.addEventListener('click', () => toon(null)));
+    ruimte();
+    $('#balk-status').textContent = [$('.balk-kop strong', balk)?.textContent, $('.balk-info', balk)?.textContent.replace(/\s+/g, ' ').trim()].filter(Boolean).join('. ');
+    // Met het toetsenbord: focus naar de eerste knop in de balk, zodat je niet langs 365 dagen hoeft te tabben
+    if (toetsenbord || focusInBalk) $('.balk-knoppen .knop', balk)?.focus({ preventScroll: true });
+  };
+
+  const tik = (d, tb) => {
+    if (!staat?.kiezen) return toon(staat?.dag === d ? null : { dag: d }, tb);
+    if (!staat.van) return toon({ kiezen: true, van: d, tot: null }, tb);
+    if (!staat.tot) return toon({ kiezen: true, van: d < staat.van ? d : staat.van, tot: d < staat.van ? staat.van : d }, tb);
+    // periode staat al: een dag ervoor verschuift het begin, anders het einde
+    return toon(d < staat.van ? { ...staat, van: d } : { ...staat, tot: d }, tb);
+  };
+
+  $('#plan-hier').addEventListener('click', e => toon({ kiezen: true, van: null, tot: null }, e.detail === 0));
+
+  // Muis: slepen over de dagen kiest direct een periode. Aanraken blijft tikken (scrollen moet kunnen).
+  let sleep = null;
+  const herstelMarkering = () => markeer(staat?.kiezen ? staat.van : null, staat?.kiezen ? staat.tot : null);
+  dagKnoppen.forEach(b => {
+    b.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) { sleep = { van: b.dataset.d, tot: b.dataset.d }; e.preventDefault(); } });
+    b.addEventListener('pointerenter', () => {
+      if (sleep) { sleep.tot = b.dataset.d; markeer(...[sleep.van, sleep.tot].sort()); }
+      else if (staat?.kiezen && staat.van && !staat.tot) markeer(...[staat.van, b.dataset.d].sort());
+    });
+    // klik op één dag (ook met Enter/spatie: dan is e.detail 0)
+    b.addEventListener('click', e => { laatsteDag = b; tik(b.dataset.d, e.detail === 0); });
+  });
+  // voorvertoning wissen als de muis de kaart verlaat zonder te slepen
+  $('.kaart', main).addEventListener('pointerleave', () => { if (!sleep) herstelMarkering(); });
+
+  // Luisteraars op document: loslaten na slepen (ook buiten de kaart) en Esc.
+  // Bij een nieuwe jaarkaart worden die van de vorige opgeruimd.
+  jaarkaartLuisteraars?.abort();
+  jaarkaartLuisteraars = new AbortController();
+  const opties = { signal: jaarkaartLuisteraars.signal };
+  document.addEventListener('pointerup', e => {
+    if (!sleep) return;
+    const { van, tot } = sleep;
+    sleep = null;
+    if (van === tot) return herstelMarkering(); // gewone klik: het click-event volgt
+    const [a, z] = [van, tot].sort();
+    toon({ kiezen: true, van: a, tot: z });
+    laatsteDag = e.target.closest?.('.dag[data-d]') || laatsteDag;
+  }, opties);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
+    if (sleep) { sleep = null; herstelMarkering(); }
+    if (staat) toon(null);
+  }, opties);
+  // de balk hoort bij de jaarkaart: bij een ander scherm weg met de ruimte die hij innam
+  window.addEventListener('hashchange', () => { document.body.classList.remove('balk-open'); jaarkaartLuisteraars?.abort(); }, opties);
 }
 
 /* ---------- instellingen ---------- */

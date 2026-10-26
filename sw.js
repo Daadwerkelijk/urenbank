@@ -1,6 +1,6 @@
 // Service worker: bewaart de app-schil zodat de app snel opent en installeerbaar is.
 // Gegevens (Supabase) gaan altijd via het netwerk en worden nooit gecachet.
-const CACHE = 'urenbank-v8';
+const CACHE = 'urenbank-v9';
 const SCHIL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/api.js', 'js/config.js', 'js/demo.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

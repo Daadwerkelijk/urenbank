@@ -21,11 +21,12 @@ demo (`?demo`), lezen mag in de live-app. Zie skill `rooktest`.
 - [ ] **Urenbank per jaar**: weekuren van januari volgend jaar invullen → urenbank begint daar op 0
 - [ ] **Jaareinde** (klok op november/december of in die maanden): "Let op" vraagt de urenbank op 0 te zetten als hij dat niet is
 - [ ] **Onzin-invoer**: 500 uur in een week, opbouwjaar leeg → begrijpelijke melding, niets opgeslagen
-- [ ] **Jaarkaart**: feestdagen, vaste vrije dagen, verlof (geboekt en gepland) zichtbaar; dag aanklikken toont details
+- [ ] **Jaarkaart**: feestdagen, vaste vrije dagen, verlof (geboekt en gepland) zichtbaar; dag aanklikken toont details in de balk onderin
 - [ ] **Instellingen**: rooster opslaan; potje uren wijzigen → saldo verandert; volgorde ▲/▼; gekocht verlof toevoegen; feestdag toevoegen en verwijderen
 - [ ] **Jaar wisselen** (‹ ›) op Weken, Verlof en Jaarkaart
 - [ ] **Zoals gepland invullen**: op Overzicht (lege huidige week) en met "= 36" in Weken; urenbank verandert niet
-- [ ] **Periode kiezen op de jaarkaart**: "Plan hier" → eerste en laatste dag (ook omgekeerd) → formulier met juiste data
+- [ ] **Periode kiezen op de jaarkaart**: "Verlof plannen" → eerste en laatste dag (ook omgekeerd) → balk onderin toont periode en werkdagen; andere dag tikken past aan; "Verder" opent formulier met juiste data. Desktop: slepen met de muis kiest direct een periode
+- [ ] **Jaarkaart afbreken**: balk onderin blijft in beeld (ook in december op telefoon); ✕, Annuleren, Esc en dezelfde dag nogmaals tikken sluiten hem
 - [ ] **Jaarovergang** (klok op 2 januari): blok staat op Overzicht, blijft na verversen, verdwijnt na "Klopt, afgerond"
 - [ ] **Excel-export**: bestand met tabbladen Weken, Verlof en Potjes
 - [ ] **Agendalink**: maken, kopiëren, nieuwe link maken (oude verandert)
