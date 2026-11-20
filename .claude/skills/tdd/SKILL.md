@@ -38,9 +38,9 @@ Self-validating, Timely.
 De rekenregels staan op twee plekken die gelijk moeten lopen:
 1. **De bron van waarheid**: SQL-functies in schema `urenbank`
    (`supabase/migrations/002_urenbank_functies.sql` en latere migraties,
-   nu t/m `004`): `landelijke_feestdagen`, `dagen`, `weken`,
+   nu t/m `010`): `landelijke_feestdagen`, `dagen`, `weken`,
    `weekoverzicht`, `verlof_overzicht` (de app; `verlof_details` is een
-   doorgeefluik), `potje_saldi`, `samenvatting(date)` (de app;
+   doorgeefluik), `potje_saldi` (doorgeefluik naar `potje_saldi_tot`), `verlof_prognose`, `samenvatting(date)` (de app;
    `samenvatting()` is een doorgeefluik), `nieuw_jaar`.
 2. **De demo-kopie**: `js/demo.js` rekent hetzelfde na in JavaScript voor
    `?demo`.

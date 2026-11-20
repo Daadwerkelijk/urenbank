@@ -26,7 +26,8 @@ Alle berekeningen staan in de database (`supabase/migrations/002_urenbank_functi
 | Verlofsaldo | Potjes uit je P&O-overzicht. Geboekt verlof wordt op datumvolgorde afgeschreven van de potjes in de ingestelde volgorde, als het potje dan beschikbaar en niet vervallen is |
 | Saldo vandaag | Alleen potjes die vandaag beschikbaar en niet vervallen zijn; potjes van volgend jaar tellen pas vanaf 1 januari |
 | Dubbel verlof | Overlappende verlofperiodes worden gemeld (waarschuwing bij opslaan en bij "Let op"); beide tellen volledig mee |
-| Na planning | Hetzelfde, maar dan ook met verlof dat nog niet geboekt is |
+| Rest eind dit jaar | Hetzelfde, maar dan ook met verlof dat nog niet geboekt is en vóór 1 januari begint |
+| Verlofsaldo per jaar | Dit jaar: saldo nu − nog gepland − vervalt = over op 31 december. Volgend jaar: over uit dit jaar + opbouw − gepland − vervalt. Zonder potjes van volgend jaar: verwachte opbouw volgens cao Gemeenten art. 6.1–6.2 (4 × en 1,6 × de weekuren). Verlof verder vooruit telt nog niet mee |
 | Verval | Wettelijk: 12 maanden na het opbouwjaar (cao Gemeenten art. 6.1 lid 2; instelbaar, wet: 6). Bovenwettelijk en gekocht: 60 maanden |
 | Verlof uit urenbank | Gaat niet van het P&O-saldo af; je schrijft minder uren, dus het zit in het weekverschil |
 

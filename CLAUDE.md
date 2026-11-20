@@ -40,6 +40,15 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
 - **Urenbank per kalenderjaar**: begint elk jaar op 0 en gaat niet mee
   naar het nieuwe jaar. De gebruiker zorgt zelf dat hij op 31 december op
   0 staat; de app waarschuwt in november en december.
+- **Verlofsaldo per jaar** (afspraak 20-11-2026): het Overzicht toont dit
+  jaar en volgend jaar los: saldo nu − nog gepland − vervalt = over op
+  31 december; volgend jaar: over uit dit jaar + opbouw − gepland − vervalt
+  = over. Verlof over de jaargrens telt mee in het jaar waarin het begint.
+  Ontbreken de potjes van volgend jaar, dan rekent de app met de
+  verwachte opbouw volgens cao Gemeenten art. 6.1–6.2 (4 × en 1,6 × de
+  weekuren = 201,6 bij 36 uur), gemarkeerd als "verwacht". Verlof verder
+  vooruit telt nog niet mee en wordt apart genoemd. Planning van volgend
+  jaar trekt de potjes van dit jaar niet leeg in "Rest eind dit jaar".
 - **Potjes** tellen pas mee en zijn pas zichtbaar op het overzicht vanaf
   "beschikbaar vanaf" (potjes van volgend jaar dus vanaf 1 januari).
 - **Dubbel verlof**: bij opslaan een waarschuwing ("Toch opslaan"); op de
@@ -64,7 +73,10 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   met peildatum, `verlof_overzicht` (met overlap), `005` jaarovergang
   afgerond (`instellingen.jaarovergang_klaar`), `006` agenda-abonnement
   (`agenda_feed` + `agenda_items`, alleen voor `service_role`), `007`
-  tokenformaat-check en `request.jwt.claim.sub`. Nieuwe
+  tokenformaat-check en `request.jwt.claim.sub`, `008` vooruitblik per
+  jaar (`verlof_prognose`, `potje_saldi_tot`; `potje_saldi` wordt
+  doorgeefluik), `009` vooruitblik alleen dit en volgend jaar, `010` randgevallen
+  vooruitblik. Nieuwe
   wijzigingen altijd in een nieuw genummerd bestand.
 - `supabase/functions/urenbank-agenda/` — Edge Function (verify_jwt uit):
   geeft met `?token=` een .ics met verlof vanaf vandaag (geen historie);

@@ -115,9 +115,6 @@ h3 { font-size: 1.05rem; font-weight: 650; }
 .legenda li { display: flex; align-items: center; gap: 0.45rem; }
 .stip { width: 0.8rem; height: 0.8rem; border-radius: 2px; display: inline-block; flex: none; }
 
-.plan { margin-top: 1.25rem; padding: 0.9rem 1rem; border-left: 4px solid var(--line-strong); background: var(--surface); border-radius: 0 var(--radius-s) var(--radius-s) 0; }
-.plan p { margin: 0; }
-.plan ul { margin: 0.5rem 0 0; padding-left: 1.1rem; color: var(--muted); }
 
 .twee { display: grid; gap: 1rem; grid-template-columns: 1fr; margin-top: 1rem; }
 @media (min-width: 860px) { .twee { grid-template-columns: 1.1fr 1fr; } }
@@ -289,7 +286,7 @@ dialog form { padding: 1.25rem; display: grid; gap: 1rem; }
 /* Telefoon rechtop: roosterdagen passen naast elkaar, lange teksten breken af */
 .rooster-dagen { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
 .rooster-dagen input { width: 100%; min-width: 0; }
-.plan li, .verlof-item h3, .verlof-item .inhoud, .signalen li, .dag-balk, .fout-tekst, .voorvertoning { overflow-wrap: anywhere; }
+.verlof-item h3, .verlof-item .inhoud, .signalen li, .dag-balk, .fout-tekst, .voorvertoning { overflow-wrap: anywhere; }
 .verlof-item .inhoud { min-width: 0; }
 .velden { grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr)); }
 
@@ -375,3 +372,17 @@ body.balk-open .melding { bottom: calc(var(--balk-h, 12rem) + 5rem); }
   .dag-balk { bottom: calc(3.75rem + env(safe-area-inset-bottom)); width: calc(100vw - 1rem); }
 }
 .kaart { user-select: none; -webkit-user-select: none; }
+
+/* Verlofsaldo per jaar: dit jaar en volgend jaar naast elkaar (telefoon: onder elkaar) */
+.jaren { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
+.jaar-kaart { display: grid; gap: 0.75rem; align-content: start; }
+.jaar-kaart h3 { margin: 0; }
+.jaar-kaart p { margin: 0; }
+.reken { margin: 0; display: grid; gap: 0.35rem; }
+.reken div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.reken dt { min-width: 0; }
+.reken dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.reken .som { border-top: 1px solid var(--line-strong); padding-top: 0.45rem; margin-top: 0.15rem; font-weight: 700; font-size: 1.1rem; }
+.reken .min dd { color: var(--min); }
+.jaar-items { margin: 0; padding-left: 1.1rem; color: var(--muted); display: grid; gap: 0.2rem; overflow-wrap: anywhere; }
+.link-knop { background: none; border: 0; padding: 0.35rem 0; font: inherit; font-weight: 600; color: var(--saldo); text-decoration: underline; cursor: pointer; }

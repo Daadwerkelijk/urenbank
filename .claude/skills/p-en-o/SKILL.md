@@ -39,6 +39,7 @@ toetst of de app de regels correct toepast.
 |---|---|---|
 | Wettelijk verlof | 4 × weekuren (144 bij 36 uur) | BW 7:634 |
 | Bovenwettelijk verlof | 1,6 × weekuren (57,6 bij 36 uur, sinds 2025) | cao Gemeenten art. 6.2 |
+| Verwachte opbouw volgend jaar | Zonder potjes: 4 × + 1,6 × weekuren, gemarkeerd "verwacht" (verlof_prognose) | cao Gemeenten art. 6.1–6.2; cao 2025–2027 loopt t/m 31-3-2027, check de nieuwe cao |
 | Verval wettelijk | 12 maanden na opbouwjaar (instelbaar; wet: 6) | BW 7:640a; cao/PGA kan langer geven |
 | Verjaring bovenwettelijk en gekocht | 60 maanden na opbouwjaar | BW 7:642 |
 | Verlofspaarpot | Niet ondersteund (verjaart niet) | cao Gemeenten art. 6.3 |

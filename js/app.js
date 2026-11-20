@@ -138,10 +138,13 @@ const herlaad = () => router();
 const POTKLEUR = ['var(--saldo)', 'var(--saldo-2)', 'var(--gekocht)', 'var(--saldo-3)', 'var(--overig)'];
 
 async function toonOverzicht(main) {
-  const [s, potjes, potjesPlan, weken, verlof, inst] = await Promise.all([
+  const [s, potjes, potjesPlan, potjesAlles, prognose, weken, verlof, inst] = await Promise.all([
     api.rpc('samenvatting', { p_peildatum: VANDAAG }),
     api.rpc('potje_saldi', { incl_gepland: false }),
-    api.rpc('potje_saldi', { incl_gepland: true }),
+    // rest eind dit jaar: alleen planning t/m 31 december (planning van volgend jaar trekt dit jaar niet leeg)
+    api.rpc('potje_saldi_tot', { incl_gepland: true, p_tot: `${DIT_JAAR}-12-31` }),
+    api.rpc('potje_saldi', { incl_gepland: true }), // voor de vervalwaarschuwing: alle planning telt
+    api.rpc('verlof_prognose', { p_peildatum: VANDAAG }),
     api.rpc('weekoverzicht', { p_jaar: DIT_JAAR }),
     api.rpc('verlof_overzicht'),
     instellingen(),
@@ -158,7 +161,9 @@ async function toonOverzicht(main) {
 
   const deze = weken.find(w => w.van <= VANDAAG && w.tot >= VANDAAG);
   const gepland = verlof.filter(v => v.status !== 'voorbij' && v.bron !== 'overig');
-  const signalen = maakSignalen({ s, potjesPlan, weken, verlof, inst });
+  const signalen = maakSignalen({ s, potjesPlan: potjesAlles, prognose, weken, verlof, inst });
+  const laatsteJaar = Math.max(...prognose.map(r => r.jaar), DIT_JAAR);
+  const later = verlof.filter(v => v.bron === 'saldo' && !v.geboekt && jaarVan(v.begin) > laatsteJaar);
   const overgang = await jaarovergangBlok(inst, potjes);
 
   main.innerHTML = `
@@ -174,12 +179,11 @@ async function toonOverzicht(main) {
       <ul class="legenda">
         ${segmenten.map(x => `<li><span class="stip" style="background:${x.kleur}"></span>${esc(x.naam)} <span class="num">${fmtU(x.uren)}</span></li>`).join('')}
       </ul>
-      <div class="plan">
-        <p>Na al je geplande verlof: <strong class="num">${fmtU(s.totaal_na_planning)} uur</strong>
-          <span class="muted">(${fmtU(s.verlof_saldo_na_planning)} verlofsaldo, ${fmtU(s.urenbank_na_planning)} urenbank)</span></p>
-        ${gepland.length ? `<ul>${gepland.map(v => `<li>${esc(v.omschrijving)}, ${periode(v.begin, v.eind)}: ${fmtU(v.kosten_uren)} uur van ${BRON[v.bron].toLowerCase()}${v.bron === 'saldo' && !v.geboekt ? ', nog niet geboekt bij P&amp;O' : ''}</li>`).join('')}</ul>` : '<p class="muted">Je hebt geen verlof gepland.</p>'}
-      </div>
     </section>
+
+    <h2>Verlofsaldo per jaar</h2>
+    <div class="jaren">${prognose.map(r => jaarKaart(r, verlof, s)).join('')}</div>
+    ${later.length ? `<p class="info">Verder vooruit gepland, telt hierboven nog niet mee: ${later.map(v => `${esc(v.omschrijving)} (${periode(v.begin, v.eind)})`).join(', ')}.</p>` : ''}
 
     <div class="twee">
       <section class="vlak" aria-labelledby="week-kop">
@@ -202,8 +206,12 @@ async function toonOverzicht(main) {
 
     <h2>Verlofsaldo per potje</h2>
     ${potjesTabel(potjes.filter(zichtbaar), potjesPlan, s)}
-    <p class="info">De volgorde van afschrijven en de vervaldatums stel je in bij Instellingen. Geboekt verlof gaat eraf, ook als het in de toekomst ligt; gepland verlof zie je in de laatste kolom.</p>`;
+    <p class="info">De volgorde van afschrijven en de vervaldatums stel je in bij Instellingen. Geboekt verlof gaat eraf, ook als het in de toekomst ligt; verlof dat je nog plant in ${DIT_JAAR} zie je in de laatste kolom.</p>`;
 
+  $$('[data-potjes-jaar]').forEach(k => k.addEventListener('click', async () => {
+    const j = +k.dataset.potjesJaar;
+    if (await bewaar(() => api.rpc('nieuw_jaar', { p_jaar: j }), `Potjes ${j} toegevoegd; ze tellen mee vanaf 1 januari`)) herlaad();
+  }));
   $('#overgang-potjes')?.addEventListener('click', async () => {
     if (await bewaar(() => api.rpc('nieuw_jaar', { p_jaar: DIT_JAAR }), `Potjes ${DIT_JAAR} toegevoegd`)) herlaad();
   });
@@ -247,6 +255,31 @@ async function jaarovergangBlok(inst, potjes) {
   </section>`;
 }
 
+// Eén jaar in de vooruitblik: begin + opbouw - gepland - vervalt = over op 31 december (berekend in verlof_prognose)
+function jaarKaart(r, verlof, s) {
+  const j = r.jaar, ditJaar = j === DIT_JAAR;
+  // komend verlof van dit jaar, plus verlof uit het verleden dat nog niet geboekt is (dat telt nog mee)
+  const items = verlof.filter(v => v.bron !== 'overig'
+    && (jaarVan(v.begin) === j ? v.status !== 'voorbij' || (v.bron === 'saldo' && !v.geboekt) : ditJaar && jaarVan(v.begin) < j && v.bron === 'saldo' && !v.geboekt));
+  const regel = (label, waarde, klasse = '') => `<div class="${klasse}"><dt>${label}</dt><dd class="num">${waarde}</dd></div>`;
+  const min = v => `−${fmtU(v)}`;
+  const eind = n(r.eind_saldo);
+  return `<article class="vlak jaar-kaart" aria-labelledby="jaar-${j}">
+    <h3 id="jaar-${j}">${j}</h3>
+    <dl class="reken">
+      ${regel(ditJaar ? 'Verlofsaldo nu <span class="muted">(zoals bij P&amp;O)</span>' : `Over uit ${j - 1}`, fmtU(r.begin_saldo))}
+      ${n(r.opbouw) ? regel(`Opbouw ${j}${r.opbouw_verwacht ? ' <span class="muted">(verwacht)</span>' : ''}`, `+${fmtU(r.opbouw)}`) : ''}
+      ${regel(ditJaar ? 'Nog gepland' : 'Gepland', n(r.gepland) ? min(r.gepland) : fmtU(0))}
+      ${n(r.vervalt) ? regel('Vervalt op 31 december', min(r.vervalt), 'min') : ''}
+      ${regel(`Over op 31 december ${j}`, fmtU(eind), `som${eind < 0 ? ' min' : ''}`)}
+    </dl>
+    ${n(r.tekort) ? `<p class="fout-tekst">Je plant in ${j} ${fmtU(r.tekort)} uur meer verlof dan je dan hebt.</p>` : ''}
+    ${items.length ? `<ul class="jaar-items">${items.map(v => `<li>${esc(v.omschrijving)}, ${periode(v.begin, v.eind)}: ${fmtU(v.kosten_uren)} uur${v.bron !== 'saldo' ? ` <span class="muted">uit ${BRON[v.bron].toLowerCase()}</span>` : !v.geboekt ? ' <span class="muted">(nog niet geboekt)</span>' : ` <span class="muted">(al geboekt, zit in ${ditJaar ? 'je saldo' : `het saldo van ${DIT_JAAR}`})</span>`}</li>`).join('')}</ul>` : `<p class="muted">Nog niets gepland in ${j}.</p>`}
+    ${r.opbouw_verwacht ? `<p class="info">Verwacht volgens cao Gemeenten: 4 × en 1,6 × je weekuren. Staan de potjes van ${j} in "Mijn saldo", <button class="link-knop" data-potjes-jaar="${j}">voeg ze dan toe</button> en pas ze zo nodig aan.</p>` : ''}
+    ${ditJaar && (n(s.urenbank) || n(s.urenbank_na_planning)) ? `<p class="info">Urenbank ${j}: ${fmtTeken(n(s.urenbank_na_planning), fmtU)} uur na je planning. Die gaat niet mee naar ${j + 1}: zorg dat hij op 31 december op 0 staat.</p>` : ''}
+  </article>`;
+}
+
 function potjesTabel(potjes, plan, s) {
   const restPlan = id => plan.find(p => p.potje_id === id)?.rest;
   const echt = potjes.filter(p => p.soort !== 'tekort');
@@ -254,7 +287,7 @@ function potjesTabel(potjes, plan, s) {
   const tekortPlan = plan.find(p => p.soort === 'tekort');
   const som = k => echt.reduce((a, p) => a + n(p[k]), 0);
   return `<div class="tabel-wrap"><table>
-    <thead><tr><th>Soort</th><th class="r">Begin</th><th class="r">Opgenomen</th><th class="r">Rest</th><th>Vervalt</th><th class="r">Rest na planning</th></tr></thead>
+    <thead><tr><th>Soort</th><th class="r">Begin</th><th class="r">Opgenomen</th><th class="r">Rest</th><th>Vervalt</th><th class="r">Rest eind ${DIT_JAAR}</th></tr></thead>
     <tbody>${echt.map(p => `<tr>
       <td>${esc(potjeNaam(p))}</td>
       <td class="r num">${fmtU(p.begin_uren)}</td>
@@ -264,11 +297,11 @@ function potjesTabel(potjes, plan, s) {
       <td class="r num">${fmtU(restPlan(p.potje_id))}</td></tr>`).join('')}
       ${tekortNu || tekortPlan ? `<tr><td class="min">Tekort</td><td></td><td></td><td class="r num min">${tekortNu ? fmtU(-tekortNu) : ''}</td><td></td><td class="r num min">${tekortPlan ? fmtU(tekortPlan.rest) : ''}</td></tr>` : ''}
     </tbody>
-    <tfoot><tr><td>Totaal</td><td class="r num">${fmtU(som('begin_uren'))}</td><td class="r num">${fmtU(som('opgenomen'))}</td><td class="r num">${fmtU(n(s.verlof_saldo) - tekortNu)}</td><td></td><td class="r num">${fmtU(s.verlof_saldo_na_planning)}</td></tr></tfoot>
+    <tfoot><tr><td>Totaal</td><td class="r num">${fmtU(som('begin_uren'))}</td><td class="r num">${fmtU(som('opgenomen'))}</td><td class="r num">${fmtU(n(s.verlof_saldo) - tekortNu)}</td><td></td><td class="r num">${fmtU(echt.reduce((a, p) => a + (n(restPlan(p.potje_id)) || 0), 0) + (tekortPlan ? n(tekortPlan.rest) : 0))}</td></tr></tfoot>
   </table></div>`;
 }
 
-function maakSignalen({ s, potjesPlan, weken, verlof, inst }) {
+function maakSignalen({ s, potjesPlan, prognose, weken, verlof, inst }) {
   const uit = [];
   const horizon = plusDagen(VANDAAG, 60);
   for (const v of verlof) {
@@ -287,8 +320,10 @@ function maakSignalen({ s, potjesPlan, weken, verlof, inst }) {
       uit.push(['fout', `<span>${fmtU(p.rest)} uur ${esc(potjeNaam(p).toLowerCase())} vervalt op ${kort(p.vervalt_op)} ${jaarVan(p.vervalt_op)}, ook na je planning. Plan dit verlof in.</span>`]);
     }
   }
-  const tekort = potjesPlan.find(p => p.soort === 'tekort');
-  if (tekort) uit.push(['fout', `<span>Je plant ${fmtU(tekort.opgenomen)} uur meer verlof dan je saldo toelaat.</span>`]);
+  if (n(s.verlof_tekort) > 0) uit.push(['fout', `<span>Je hebt ${fmtU(s.verlof_tekort)} uur meer verlof geboekt dan je saldo. Klopt een potje of een geboekt aantal uren niet?</span>`]);
+  for (const r of prognose.filter(r => n(r.tekort) > 0)) {
+    uit.push(['fout', `<span>Je plant in ${r.jaar} ${fmtU(r.tekort)} uur meer verlof dan je dan hebt${r.opbouw_verwacht ? ' (met de verwachte opbouw)' : ''}.</span>`]);
+  }
   const ub = n(s.urenbank);
   if (ub !== 0 && new Date().getMonth() >= 10) {
     uit.push(['let-op', `<span>Je urenbank ${esc(s.urenbank_jaar)} staat op ${fmtTeken(ub, fmtU)} uur. Zorg dat hij op 31 december op 0 staat: ${ub > 0 ? `neem nog ${fmtU(ub)} uur vrij of schrijf minder` : `werk nog ${fmtU(-ub)} uur extra`}.</span>`]);

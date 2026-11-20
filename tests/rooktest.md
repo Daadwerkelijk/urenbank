@@ -9,7 +9,8 @@ demo (`?demo`), lezen mag in de live-app. Zie skill `rooktest`.
 
 ## Kernflows
 - [ ] **Inloggen**: inlogscherm toont alleen "Stuur inloglink" (geen wachtwoordveld); demo-link werkt; na inloggen opent Overzicht
-- [ ] **Overzicht**: groot getal = verlofsaldo + urenbank; balk en legenda tellen op tot hetzelfde getal; "na planning" is lager bij nog niet geboekt verlof
+- [ ] **Overzicht**: groot getal = verlofsaldo + urenbank; balk en legenda tellen op tot hetzelfde getal
+- [ ] **Verlofsaldo per jaar**: kaart dit jaar (saldo nu − nog gepland = over op 31 december) en, bij verlof volgend jaar, kaart volgend jaar (over uit dit jaar + opbouw − gepland); zonder potjes volgend jaar staat de opbouw als "verwacht" en verdwijnt dat na "voeg ze dan toe"; planning volgend jaar geeft geen tekort in "Rest eind dit jaar"
 - [ ] **Deze week invullen** op Overzicht: getal verandert met (Timetell − norm)
 - [ ] **Weken**: huidige week gemarkeerd; uren invullen en leegmaken werkt; urenbank-kolom loopt cumulatief
 - [ ] **Dag schuiven**: week openen, woensdag 9 en donderdag 0 → weeknorm blijft gelijk; "Standaard" zet terug

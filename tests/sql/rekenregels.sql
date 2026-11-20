@@ -5,7 +5,7 @@
 -- Uitvoeren: via execute_sql (Supabase MCP) of in de Supabase SQL Editor.
 -- Bewust zonder drop, delete en update zonder where: die vragen via de MCP om een bevestiging.
 -- Opruimen gebeurt door de rollback.
--- Vereist migratie 007.
+-- Vereist migratie 010.
 
 begin;
 
@@ -103,8 +103,52 @@ select pg_temp.verwacht('Daarna wettelijk 2026', 10::numeric, (select rest from 
 select pg_temp.verwacht('Saldo na planning (kerst erbij)', 129.2::numeric, (select sum(rest) from urenbank.potje_saldi(true)));
 select pg_temp.verwacht('Samenvatting: totaal = saldo + urenbank', 167.2::numeric, (urenbank.samenvatting('2026-10-23')->>'totaal')::numeric);
 
+-- Vooruitblik per jaar (migratie 008, 009, 010): dit jaar los van volgend jaar; opbouw volgend jaar verwacht volgens cao
+insert into urenbank.verlof (begin, eind, omschrijving, bron) values ('2027-07-05', '2027-07-09', 'Zomer 2027', 'saldo');
+select pg_temp.verwacht('Zomer 2027 (ma, di, do, vr) kost 36 uur', 36::numeric, (select kosten_uren from urenbank.verlof_overzicht() where omschrijving = 'Zomer 2027'));
+select pg_temp.verwacht('Rest eind dit jaar: alleen planning t/m 31 december', 129.2::numeric,
+  (select sum(rest) from urenbank.potje_saldi_tot(true, '2026-12-31') where soort <> 'tekort'));
+select pg_temp.verwacht('Vooruitblik: dit jaar en volgend jaar', 2::bigint, (select count(*) from urenbank.verlof_prognose('2026-10-23')));
+select pg_temp.verwacht('2026: begint met saldo nu', 165.2::numeric, (select begin_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('2026: nog gepland (kerst)', 36::numeric, (select gepland from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('2026: over op 31 december', 129.2::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('2027: begint met wat over is uit 2026', 129.2::numeric, (select begin_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2027: opbouw volgens cao (4 + 1,6 x weekuren)', 201.6::numeric, (select opbouw from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2027: opbouw is verwacht (nog geen potjes)', true, (select opbouw_verwacht from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2027: gepland', 36::numeric, (select gepland from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2027: over op 31 december', 294.8::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+insert into urenbank.verlof (begin, eind, omschrijving, bron) values ('2029-03-05', '2029-03-09', 'Ver weg', 'saldo');
+select pg_temp.verwacht('Vooruitblik kijkt niet verder dan volgend jaar', 2::bigint, (select count(*) from urenbank.verlof_prognose('2026-10-23')));
+select pg_temp.verwacht('Verlof na volgend jaar telt niet mee', 294.8::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+update urenbank.verlof set bron = 'overig' where omschrijving = 'Ver weg';
+update urenbank.verlof_potje set vervalt_op = '2026-12-31' where soort = 'gekocht' and opbouwjaar = 2025;
+select pg_temp.verwacht('2026: rest gekocht vervalt eind 2026', 14::numeric, (select vervalt from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('2026: over na verval', 115.2::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('2027: over na verval in 2026', 280.8::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+update urenbank.verlof_potje set vervalt_op = null where soort = 'gekocht' and opbouwjaar = 2025;
+update urenbank.verlof set uren_handmatig = 500 where omschrijving = 'Zomer 2027';
+select pg_temp.verwacht('2027: tekort als planning de opbouw overstijgt', 169.2::numeric, (select tekort from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2027: over is negatief bij tekort', -169.2::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2026: geen tekort door planning 2027', 0::numeric, (select tekort from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+update urenbank.verlof set uren_handmatig = null, bron = 'overig' where omschrijving = 'Zomer 2027';
+select pg_temp.verwacht('Zonder planning volgend jaar: alleen dit jaar', 1::bigint, (select count(*) from urenbank.verlof_prognose('2026-10-23')));
+update urenbank.verlof set bron = 'saldo' where omschrijving = 'Ver weg';
+select pg_temp.verwacht('Alleen verlof na volgend jaar: geen lege kaart volgend jaar', 1::bigint, (select count(*) from urenbank.verlof_prognose('2026-10-23')));
+update urenbank.verlof set bron = 'overig' where omschrijving = 'Ver weg';
+update urenbank.verlof_potje set vervalt_op = '2026-03-31' where soort = 'gekocht' and opbouwjaar = 2025;
+insert into urenbank.verlof (begin, eind, omschrijving, bron) values ('2026-03-02', '2026-03-03', 'Vergeten te boeken', 'saldo');
+select pg_temp.verwacht('Niet geboekt verlof uit het verleden: saldo nu zonder vervallen potje', 125.2::numeric, (select begin_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('Niet geboekt verlof uit het verleden: alleen het deel dat het saldo raakt', 46::numeric, (select gepland from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+select pg_temp.verwacht('Niet geboekt verlof uit het verleden: rekensom sluit', 79.2::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
+update urenbank.verlof set bron = 'overig' where omschrijving = 'Vergeten te boeken';
+update urenbank.verlof_potje set vervalt_op = null where soort = 'gekocht' and opbouwjaar = 2025;
+
 -- Potjes van volgend jaar tellen pas mee vanaf hun eerste dag
 select urenbank.nieuw_jaar(2027);
+update urenbank.verlof set bron = 'saldo' where omschrijving = 'Zomer 2027';
+select pg_temp.verwacht('2027 met echte potjes: opbouw niet meer verwacht', false, (select opbouw_verwacht from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+select pg_temp.verwacht('2027 met echte potjes: zelfde uitkomst', 294.8::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2027));
+update urenbank.verlof set bron = 'overig' where omschrijving = 'Zomer 2027';
 select pg_temp.verwacht('Potjes 2027 tellen in 2026 niet mee', 165.2::numeric, (urenbank.samenvatting('2026-10-23')->>'verlof_saldo')::numeric);
 select pg_temp.verwacht('Potjes 2027 tellen vanaf 1 januari 2027 mee', 366.8::numeric, (urenbank.samenvatting('2027-01-11')->>'verlof_saldo')::numeric);
 
@@ -133,7 +177,7 @@ insert into urenbank.verlof (begin, eind, omschrijving, bron, geboekt) values ('
 insert into urenbank.agenda_feed default values;
 select set_config('test.token', (select token from urenbank.agenda_feed), true);
 select set_config('test.verwacht', (select count(*)::text from urenbank.verlof_overzicht() where eind >= '2026-10-23'), true);
-select pg_temp.verwacht('Vanaf 23-10 alleen Kerst in beeld', '1', current_setting('test.verwacht'));
+select pg_temp.verwacht('Vanaf 23-10: Kerst, Zomer 2027 en Ver weg in beeld', '3', current_setting('test.verwacht'));
 select pg_temp.verwacht('Token is 64 tekens hex', true, current_setting('test.token') ~ '^[0-9a-f]{64}$');
 do $$ begin
   update urenbank.agenda_feed set token = 'zwak' where user_id = '00000000-0000-0000-0000-0000000000a1';
@@ -173,6 +217,7 @@ select pg_temp.verwacht('Feed van andere gebruiker bevat geen verlof van de eers
 reset role;
 set local role authenticated;
 select pg_temp.verwacht('Andere gebruiker ziet geen verlof', 0::bigint, (select count(*) from urenbank.verlof));
+select pg_temp.verwacht('Andere gebruiker: vooruitblik zonder eigen verlof', 0::numeric, (select eind_saldo from urenbank.verlof_prognose('2026-10-23') where jaar = 2026));
 
 select 'ALLES GROEN' as resultaat;
 

@@ -97,8 +97,53 @@ verwacht('Daarna wettelijk 2026', 10, (await api.rpc('potje_saldi')).find(p => p
 verwacht('Saldo na planning (kerst erbij)', 129.2, som(await api.rpc('potje_saldi', { incl_gepland: true })));
 verwacht('Samenvatting: totaal = saldo + urenbank', 167.2, (await api.rpc('samenvatting', { p_peildatum: '2026-10-23' })).totaal);
 
+// Vooruitblik per jaar: dit jaar los van volgend jaar; opbouw volgend jaar verwacht volgens cao
+const z27 = await api.insert('verlof', { begin: '2027-07-05', eind: '2027-07-09', omschrijving: 'Zomer 2027', bron: 'saldo', uren_handmatig: null, geboekt: false, geboekte_uren: null });
+verwacht('Zomer 2027 kost 36 uur', 36, (await vd('Zomer 2027')).kosten_uren);
+verwacht('Rest eind dit jaar: alleen planning t/m 31 december', 129.2, som(await api.rpc('potje_saldi_tot', { incl_gepland: true, p_tot: '2026-12-31' })));
+const prog = async j => (await api.rpc('verlof_prognose', { p_peildatum: '2026-10-23' })).find(r => r.jaar === j);
+verwacht('Vooruitblik: dit jaar en volgend jaar', 2, (await api.rpc('verlof_prognose', { p_peildatum: '2026-10-23' })).length);
+verwacht('2026: begint met saldo nu', 165.2, (await prog(2026)).begin_saldo);
+verwacht('2026: nog gepland (kerst)', 36, (await prog(2026)).gepland);
+verwacht('2026: over op 31 december', 129.2, (await prog(2026)).eind_saldo);
+verwacht('2027: begint met wat over is uit 2026', 129.2, (await prog(2027)).begin_saldo);
+verwacht('2027: opbouw volgens cao (4 + 1,6 x weekuren)', 201.6, (await prog(2027)).opbouw);
+verwacht('2027: opbouw is verwacht (nog geen potjes)', true, (await prog(2027)).opbouw_verwacht);
+verwacht('2027: gepland', 36, (await prog(2027)).gepland);
+verwacht('2027: over op 31 december', 294.8, (await prog(2027)).eind_saldo);
+const ver = await api.insert('verlof', { begin: '2029-03-05', eind: '2029-03-09', omschrijving: 'Ver weg', bron: 'saldo', uren_handmatig: null, geboekt: false, geboekte_uren: null });
+verwacht('Vooruitblik kijkt niet verder dan volgend jaar', 2, (await api.rpc('verlof_prognose', { p_peildatum: '2026-10-23' })).length);
+verwacht('Verlof na volgend jaar telt niet mee', 294.8, (await prog(2027)).eind_saldo);
+await api.update('verlof', { id: ver.id }, { bron: 'overig' });
+const gek = (await api.list('verlof_potje')).find(p => p.soort === 'gekocht' && p.opbouwjaar === 2025);
+await api.update('verlof_potje', { id: gek.id }, { vervalt_op: '2026-12-31' });
+verwacht('2026: rest gekocht vervalt eind 2026', 14, (await prog(2026)).vervalt);
+verwacht('2026: over na verval', 115.2, (await prog(2026)).eind_saldo);
+verwacht('2027: over na verval in 2026', 280.8, (await prog(2027)).eind_saldo);
+await api.update('verlof_potje', { id: gek.id }, { vervalt_op: null });
+await api.update('verlof', { id: z27.id }, { uren_handmatig: 500 });
+verwacht('2027: tekort als planning de opbouw overstijgt', 169.2, (await prog(2027)).tekort);
+verwacht('2027: over is negatief bij tekort', -169.2, (await prog(2027)).eind_saldo);
+verwacht('2026: geen tekort door planning 2027', 0, (await prog(2026)).tekort);
+await api.update('verlof', { id: z27.id }, { uren_handmatig: null, bron: 'overig' });
+verwacht('Zonder planning volgend jaar: alleen dit jaar', 1, (await api.rpc('verlof_prognose', { p_peildatum: '2026-10-23' })).length);
+await api.update('verlof', { id: ver.id }, { bron: 'saldo' });
+verwacht('Alleen verlof na volgend jaar: geen lege kaart volgend jaar', 1, (await api.rpc('verlof_prognose', { p_peildatum: '2026-10-23' })).length);
+await api.update('verlof', { id: ver.id }, { bron: 'overig' });
+await api.update('verlof_potje', { id: gek.id }, { vervalt_op: '2026-03-31' });
+const verg = await api.insert('verlof', { begin: '2026-03-02', eind: '2026-03-03', omschrijving: 'Vergeten te boeken', bron: 'saldo', uren_handmatig: null, geboekt: false, geboekte_uren: null });
+verwacht('Niet geboekt verlof uit het verleden: saldo nu zonder vervallen potje', 125.2, (await prog(2026)).begin_saldo);
+verwacht('Niet geboekt verlof uit het verleden: alleen het deel dat het saldo raakt', 46, (await prog(2026)).gepland);
+verwacht('Niet geboekt verlof uit het verleden: rekensom sluit', 79.2, (await prog(2026)).eind_saldo);
+await api.update('verlof', { id: verg.id }, { bron: 'overig' });
+await api.update('verlof_potje', { id: gek.id }, { vervalt_op: null });
+
 // Potjes van volgend jaar tellen pas mee vanaf hun eerste dag
 await api.rpc('nieuw_jaar', { p_jaar: 2027 });
+await api.update('verlof', { id: z27.id }, { bron: 'saldo' });
+verwacht('2027 met echte potjes: opbouw niet meer verwacht', false, (await prog(2027)).opbouw_verwacht);
+verwacht('2027 met echte potjes: zelfde uitkomst', 294.8, (await prog(2027)).eind_saldo);
+await api.update('verlof', { id: z27.id }, { bron: 'overig' });
 verwacht('Potjes 2027 tellen in 2026 niet mee', 165.2, (await api.rpc('samenvatting', { p_peildatum: '2026-10-23' })).verlof_saldo);
 verwacht('Potjes 2027 tellen vanaf 1 januari 2027 mee', 366.8, (await api.rpc('samenvatting', { p_peildatum: '2027-01-11' })).verlof_saldo);
 

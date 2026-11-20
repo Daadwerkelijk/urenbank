@@ -36,6 +36,7 @@ const store = {
     { id: 9, user_id: 'demo', begin: `${JAAR}-05-28`, eind: `${JAAR}-05-29`, omschrijving: 'Lang weekend', bron: 'urenbank', soort_overig: null, uren_handmatig: null, geboekt: false, geboekte_uren: null },
     { id: 10, user_id: 'demo', begin: `${JAAR}-07-20`, eind: `${JAAR}-08-09`, omschrijving: 'Zomervakantie', bron: 'saldo', soort_overig: null, uren_handmatig: null, geboekt: true, geboekte_uren: 108 },
     { id: 11, user_id: 'demo', begin: `${JAAR}-12-21`, eind: `${JAAR}-12-31`, omschrijving: 'Kerstvakantie', bron: 'saldo', soort_overig: null, uren_handmatig: null, geboekt: false, geboekte_uren: null },
+    { id: 12, user_id: 'demo', begin: `${JAAR + 1}-05-01`, eind: `${JAAR + 1}-05-09`, omschrijving: 'Meivakantie', bron: 'saldo', soort_overig: null, uren_handmatig: null, geboekt: false, geboekte_uren: null },
   ],
 };
 
@@ -138,7 +139,65 @@ function verlofDetails() {
   });
 }
 
-function potjeSaldi({ incl_gepland = false } = {}) {
+function potjeSaldi({ incl_gepland = false } = {}) { return potjeSaldiTot({ incl_gepland, p_tot: null }); }
+
+// Spiegel van urenbank.verlof_prognose: per jaar begin, opbouw (verwacht volgens cao als potjes ontbreken), dit en volgend jaar,
+// gepland, vervalt, tekort en eind. Zie migratie 008.
+function verlofPrognose({ p_peildatum = null } = {}) {
+  const inst = store.instellingen[0];
+  const peil = p_peildatum || iso(new Date());
+  const y0 = +peil.slice(0, 4);
+  const w = Number(inst.uren_per_week ?? 36);
+  const verlof = verlofDetails().filter(v => v.bron === 'saldo' && v.begin >= inst.startdatum);
+  const gepl = verlof.filter(v => !v.geboekt);
+  const binnen = gepl.map(v => +v.begin.slice(0, 4)).filter(j => j <= y0 + 1);
+  const ymax = Math.max(y0, ...binnen);
+  const verv = (soort, jaar) => toIso(new Date(Date.UTC(jaar, 12 + Number(soort === 'wettelijk' ? inst.verval_wettelijk_maanden : inst.verval_bovenwettelijk_maanden), 0)));
+  const potjes = [...store.verlof_potje].sort((a, b) => a.prioriteit - b.prioriteit || a.id - b.id).map(p => ({
+    soort: p.soort, jaar: p.opbouwjaar, rest: Number(p.uren) + Number(p.correctie), van: p.beschikbaar_vanaf,
+    verv: p.vervalt_op || verv(p.soort, p.opbouwjaar), verwacht: false }));
+  // neemt uren af in de afschrijfvolgorde; geeft het tekort en het deel uit potjes die op de peildatum nog gelden
+  const neem = (dag, uren) => {
+    let nodig = uren, telt = 0;
+    for (const p of potjes) {
+      if (nodig <= 0) break;
+      if (p.van <= dag && p.verv >= dag && p.rest > 0) {
+        const x = Math.min(p.rest, nodig); p.rest = r2(p.rest - x); nodig = r2(nodig - x);
+        if (p.verv >= peil) telt = r2(telt + x);
+      }
+    }
+    return { tekort: Math.max(nodig, 0), telt };
+  };
+  let tekort1 = 0;
+  for (const v of verlof.filter(v => v.geboekt)) tekort1 += neem(v.begin, v.geboekte_uren != null ? Number(v.geboekte_uren) : v.kosten_uren).tekort;
+  for (let y = y0 + 1; y <= ymax; y++) {
+    for (const [soort, uren] of [['wettelijk', 4 * w], ['bovenwettelijk', r2(1.6 * w)]]) {
+      if (!potjes.some(p => p.soort === soort && p.jaar === y)) potjes.push({ soort, jaar: y, rest: uren, van: `${y}-01-01`, verv: verv(soort, y), verwacht: true });
+    }
+  }
+  potjes.forEach(p => { p.rest1 = p.rest; });
+  const som = (lijst, k = 'rest') => lijst.reduce((s, p) => s + p[k], 0);
+  let vorig = r2(som(potjes.filter(p => p.van <= peil && p.verv >= peil)) - tekort1);
+  let tekortCum = tekort1;
+  const uit = [];
+  for (let y = y0; y <= ymax; y++) {
+    const einde = `${y}-12-31`, onder = y === y0 ? peil : `${y}-01-01`;
+    const dezeJaar = gepl.filter(v => v.begin <= einde && (y === y0 || v.begin >= `${y}-01-01`));
+    let gepland = 0, tekort = 0;
+    // gepland = wat het saldo raakt: niet het deel uit een potje dat inmiddels al vervallen is (verlof uit het verleden)
+    for (const v of dezeJaar) { const r = neem(v.begin, v.kosten_uren); gepland += r.telt + r.tekort; tekort += r.tekort; }
+    tekortCum += tekort;
+    const nieuw = potjes.filter(p => p.van > (y === y0 ? peil : `${y - 1}-12-31`) && p.van <= einde);
+    const eind = r2(som(potjes.filter(p => p.van <= einde && p.verv > einde)) - tekortCum);
+    uit.push({ jaar: y, begin_saldo: vorig, opbouw: r2(som(nieuw, 'rest1')), opbouw_verwacht: nieuw.some(p => p.verwacht),
+      gepland: r2(gepland), vervalt: r2(som(potjes.filter(p => p.van <= einde && p.verv >= onder && p.verv <= einde && p.rest > 0))),
+      tekort: r2(tekort), eind_saldo: eind });
+    vorig = eind;
+  }
+  return uit;
+}
+
+function potjeSaldiTot({ incl_gepland = false, p_tot = null } = {}) {
   const inst = store.instellingen[0];
   const potjes = [...store.verlof_potje].sort((a, b) => a.prioriteit - b.prioriteit || a.id - b.id).map(p => {
     const mnd = p.soort === 'wettelijk' ? inst.verval_wettelijk_maanden : inst.verval_bovenwettelijk_maanden;
@@ -149,7 +208,7 @@ function potjeSaldi({ incl_gepland = false } = {}) {
       beschikbaar_vanaf: p.beschikbaar_vanaf, vervalt_op: verv, prioriteit: p.prioriteit };
   });
   let tekort = 0;
-  for (const o of verlofDetails().filter(v => v.bron === 'saldo' && v.begin >= inst.startdatum && (v.geboekt || incl_gepland))) {
+  for (const o of verlofDetails().filter(v => v.bron === 'saldo' && v.begin >= inst.startdatum && (v.geboekt || (incl_gepland && (!p_tot || v.begin <= p_tot))))) {
     let nodig = o.geboekt && o.geboekte_uren != null ? Number(o.geboekte_uren) : o.kosten_uren;
     for (const p of potjes) {
       if (nodig <= 0) break;
@@ -226,7 +285,7 @@ export const demoApi = {
   async signOut() { location.search = ''; },
   async sendLoginLink() {},
   async rpc(fn, args = {}) {
-    const f = { dagen, weekoverzicht, verlof_overzicht: verlofDetails, verlof_details: verlofDetails, potje_saldi: potjeSaldi, samenvatting, nieuw_jaar: nieuwJaar }[fn];
+    const f = { dagen, weekoverzicht, verlof_overzicht: verlofDetails, verlof_details: verlofDetails, potje_saldi: potjeSaldi, potje_saldi_tot: potjeSaldiTot, verlof_prognose: verlofPrognose, samenvatting, nieuw_jaar: nieuwJaar }[fn];
     if (!f) throw new Error(`Onbekende functie ${fn}`);
     return clone(f(args));
   },
