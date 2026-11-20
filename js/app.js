@@ -641,11 +641,11 @@ async function toonJaar(main, arg) {
     else if (n(d.norm_uren) === 0) k.push('vrij');
     if (d.feestdag && d.verlof_bron) k.push('feest-ook');
     if (opDag(d.datum, false).length) k.push('agenda');
-    if (opDag(d.datum, true).length) k.push('school');
+    if (d.isodow < 6 && opDag(d.datum, true).length) k.push('school'); // weekend: kinderen zijn toch vrij
     if (d.datum === VANDAAG) k.push('vandaag');
     return k.join(' ');
   };
-  const schoolTekst = d => { const s = opDag(d.datum, true); return s.length ? `Kinderen vrij: ${s.map(a => a.omschrijving).join(', ')}` : ''; };
+  const schoolTekst = d => { const s = d.isodow < 6 ? opDag(d.datum, true) : []; return s.length ? `Kinderen vrij: ${s.map(a => a.omschrijving).join(', ')}` : ''; };
   const overigTekst = d => opDag(d.datum, false).map(a => a.omschrijving).join(', ');
   const label = d => [dfLang.format(datum(d.datum)), d.feestdag, d.verlof_omschrijving, overigTekst(d), schoolTekst(d),
     !d.feestdag && !d.verlof_omschrijving && n(d.norm_uren) > 0 ? `${fmt(d.norm_uren)} uur werken` : '',

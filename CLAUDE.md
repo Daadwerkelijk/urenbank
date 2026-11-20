@@ -35,7 +35,8 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
 - **KPE/werksessies**: alleen info in de planning, geen effect op uren.
 - **Kinderen vrij** (afspraak 20-11-2026): schoolvakanties en vrije
   schooldagen staan als `agenda_item` met soort `schoolvakantie` (zonder
-  schoolnaam). De jaarkaart toont ze subtiel als stipje rechtsboven met
+  schoolnaam). De jaarkaart toont ze subtiel als stipje rechtsboven (niet op
+  zaterdag en zondag) met
   "Kinderen vrij" in de legenda en de dagdetails; geen effect op uren.
   Twijfelachtige losse schooldagen bewust weggelaten. Geen schoolnaam of
   schooldetails in de repo.
