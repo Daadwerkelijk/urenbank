@@ -27,6 +27,7 @@ demo (`?demo`), lezen mag in de live-app. Zie skill `rooktest`.
 - [ ] **Jaar wisselen** (‹ ›) op Weken, Verlof en Jaarkaart
 - [ ] **Zoals gepland invullen**: op Overzicht (lege huidige week) en met "= 36" in Weken; urenbank verandert niet
 - [ ] **Periode kiezen op de jaarkaart**: "Verlof plannen" → eerste en laatste dag (ook omgekeerd) → balk onderin toont periode en werkdagen; andere dag tikken past aan; "Verder" opent formulier met juiste data. Desktop: slepen met de muis kiest direct een periode
+- [ ] **Kinderen vrij**: schoolvakanties krijgen een stipje rechtsboven (ook op verlof- en feestdagen, licht en donker), legenda "Kinderen vrij", dagdetails "Kinderen vrij: …"; werksessies houden hun streepje onderaan
 - [ ] **Jaarkaart afbreken**: balk onderin blijft in beeld (ook in december op telefoon); ✕, Annuleren, Esc en dezelfde dag nogmaals tikken sluiten hem
 - [ ] **Jaarovergang** (klok op 2 januari): blok staat op Overzicht, blijft na verversen, verdwijnt na "Klopt, afgerond"
 - [ ] **Excel-export**: bestand met tabbladen Weken, Verlof en Potjes

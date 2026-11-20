@@ -13,6 +13,7 @@
   --bank: #c3801a;
   --bank-zacht: #f4e3c4;
   --overig: #7a68a6;
+  --school: #2e8b62;
   --feest: #b6463a;
   --plus: #2c7a4d;
   --min: #b6463a;
@@ -37,6 +38,7 @@
     --bank: #e0a040;
     --bank-zacht: #3f3220;
     --overig: #a593d1;
+    --school: #5cc39a;
     --feest: #e07467;
     --plus: #5fbf86;
     --min: #e07467;
@@ -386,3 +388,10 @@ body.balk-open .melding { bottom: calc(var(--balk-h, 12rem) + 5rem); }
 .reken .min dd { color: var(--min); }
 .jaar-items { margin: 0; padding-left: 1.1rem; color: var(--muted); display: grid; gap: 0.2rem; overflow-wrap: anywhere; }
 .link-knop { background: none; border: 0; padding: 0.35rem 0; font: inherit; font-weight: 600; color: var(--saldo); text-decoration: underline; cursor: pointer; }
+
+/* Kinderen vrij (schoolvakantie): klein stipje rechtsboven, met een randje zodat het ook op gekleurde dagen zichtbaar is */
+.dag.school::before { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--school); box-shadow: 0 0 0 1.5px var(--surface); }
+.stip-school { background: var(--surface); position: relative; }
+.stip-school::after { content: ''; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 50%; background: var(--school); }
+.dag-balk .chip { white-space: normal; }
+.chip.school { background: color-mix(in srgb, var(--school) 18%, var(--surface)); color: var(--ink); }

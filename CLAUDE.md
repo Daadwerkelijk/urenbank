@@ -33,6 +33,12 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   1 mei: onbekend of de gebruiker die keuzedag heeft; behandeld als
   werkdag.
 - **KPE/werksessies**: alleen info in de planning, geen effect op uren.
+- **Kinderen vrij** (afspraak 20-11-2026): schoolvakanties en vrije
+  schooldagen staan als `agenda_item` met soort `schoolvakantie` (zonder
+  schoolnaam). De jaarkaart toont ze subtiel als stipje rechtsboven met
+  "Kinderen vrij" in de legenda en de dagdetails; geen effect op uren.
+  Twijfelachtige losse schooldagen bewust weggelaten. Geen schoolnaam of
+  schooldetails in de repo.
 - **Controlepunt 23-10-2026**: de app kwam per potje tot op de honderdste
   overeen met het P&O-overzicht ("Mijn saldo"). Bij een nieuw verschil:
   vergelijk per potje begin, opgenomen en rest (skill `p-en-o`). Echte
@@ -168,7 +174,8 @@ een taak, vóór commit/push: de agent `code-controleur` laten meekijken.
 
 ### Privacy
 - Alleen arbeidsgegevens die nodig zijn: uren, verlofdata, korte
-  omschrijving. Geen medische details, namen van derden, BSN, salaris of
+  omschrijving. Uitzondering (afspraak 20-11-2026): schoolvakanties van
+  de kinderen als "kinderen vrij", zonder schoolnaam of namen. Geen medische details, namen van derden, BSN, salaris of
   rekeningnummers.
 
 ## Sessiebeheer

@@ -22,6 +22,7 @@ const store = {
   agenda_item: [
     { id: 2, user_id: 'demo', begin: `${JAAR}-03-09`, eind: `${JAAR}-03-13`, omschrijving: 'Planningssessie', soort: 'werksessie' },
     { id: 3, user_id: 'demo', begin: `${JAAR}-10-17`, eind: `${JAAR}-10-25`, omschrijving: 'Herfstvakantie school', soort: 'schoolvakantie' },
+    { id: 13, user_id: 'demo', begin: `${JAAR}-12-19`, eind: `${JAAR + 1}-01-03`, omschrijving: 'Kerstvakantie', soort: 'schoolvakantie' },
   ],
   week_uren: [],
   agenda_feed: [],

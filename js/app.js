@@ -619,9 +619,14 @@ function verlofFormulier(v, jaar, voorinvulling = {}) {
 let jaarkaartLuisteraars = null; // AbortController: luisteraars op document van de vorige jaarkaart opruimen
 async function toonJaar(main, arg) {
   const jaar = geldigJaar(+arg || DIT_JAAR);
-  const dagen = await api.rpc('dagen', { van: `${jaar}-01-01`, tot: `${jaar}-12-31` });
-  const verlof = await api.rpc('verlof_overzicht');
+  const [dagen, verlof, agendaItems] = await Promise.all([
+    api.rpc('dagen', { van: `${jaar}-01-01`, tot: `${jaar}-12-31` }),
+    api.rpc('verlof_overzicht'),
+    api.list('agenda_item', { order: 'begin' }).catch(() => []), // alleen weergave: zonder agenda blijft de kaart werken
+  ]);
   const status = new Map(verlof.map(v => [v.id, v]));
+  // Schoolvakanties apart van werksessies en info: subtiel stipje "kinderen vrij" (alleen weergave, raakt geen uren)
+  const opDag = (datum, school) => agendaItems.filter(a => (a.soort === 'schoolvakantie') === school && a.begin <= datum && a.eind >= datum);
   const perMaand = Array.from({ length: 12 }, () => []);
   dagen.forEach(d => perMaand[+d.datum.slice(5, 7) - 1].push(d));
 
@@ -635,11 +640,14 @@ async function toonJaar(main, arg) {
     else if (d.isodow >= 6) k.push('weekend');
     else if (n(d.norm_uren) === 0) k.push('vrij');
     if (d.feestdag && d.verlof_bron) k.push('feest-ook');
-    if (d.agenda) k.push('agenda');
+    if (opDag(d.datum, false).length) k.push('agenda');
+    if (opDag(d.datum, true).length) k.push('school');
     if (d.datum === VANDAAG) k.push('vandaag');
     return k.join(' ');
   };
-  const label = d => [dfLang.format(datum(d.datum)), d.feestdag, d.verlof_omschrijving, d.agenda,
+  const schoolTekst = d => { const s = opDag(d.datum, true); return s.length ? `Kinderen vrij: ${s.map(a => a.omschrijving).join(', ')}` : ''; };
+  const overigTekst = d => opDag(d.datum, false).map(a => a.omschrijving).join(', ');
+  const label = d => [dfLang.format(datum(d.datum)), d.feestdag, d.verlof_omschrijving, overigTekst(d), schoolTekst(d),
     !d.feestdag && !d.verlof_omschrijving && n(d.norm_uren) > 0 ? `${fmt(d.norm_uren)} uur werken` : '',
     !d.feestdag && !d.verlof_omschrijving && n(d.norm_uren) === 0 && d.isodow < 6 ? 'vaste vrije dag' : ''].filter(Boolean).join(', ');
 
@@ -660,6 +668,7 @@ async function toonJaar(main, arg) {
       <li><span class="stip" style="box-shadow:inset 0 0 0 2px var(--feest)"></span>Feestdag</li>
       <li><span class="stip" style="background:var(--vrij)"></span>Vaste vrije dag</li>
       <li><span class="stip" style="background:var(--surface);box-shadow:inset 0 -3px 0 var(--ink)"></span>Werksessie of info</li>
+      ${agendaItems.some(a => a.soort === 'schoolvakantie') ? '<li><span class="stip stip-school"></span>Kinderen vrij</li>' : ''}
     </ul>
     <p class="muted kaart-hint">Tik op een dag voor details. Verlof plannen: tik op <strong>Verlof plannen</strong> en daarna op je eerste en laatste dag${matchMedia('(pointer: fine)').matches ? ', of sleep met de muis over de dagen' : ''}.</p>
     <div class="kaart">
@@ -716,7 +725,8 @@ async function toonJaar(main, arg) {
           ${d.feestdag ? `<span class="chip feest">${esc(d.feestdag)}</span>` : ''}
           ${n(d.norm_uren) > 0 ? `<span>${fmt(d.norm_uren)} uur volgens rooster</span>` : d.isodow < 6 && !d.feestdag ? '<span class="muted">Vaste vrije dag</span>' : ''}
           ${v ? `<span class="chip ${esc(v.bron)}">${esc(v.omschrijving)}</span><span class="muted">${periode(v.begin, v.eind)}, ${fmtU(v.kosten_uren)} uur, ${v.dagen_aansluitend_vrij} dagen aaneengesloten vrij</span>` : ''}
-          ${d.agenda ? `<span>${esc(d.agenda)}</span>` : ''}
+          ${overigTekst(d) ? `<span>${esc(overigTekst(d))}</span>` : ''}
+          ${schoolTekst(d) ? `<span class="chip school">${esc(schoolTekst(d))}</span>` : ''}
         </div>
         <div class="rij balk-knoppen">${v ? '<button class="knop" data-bewerk>Verlof bewerken</button>' : '<button class="knop" data-plan-vanaf>Verlof plannen vanaf hier</button>'}</div>`;
       $('[data-bewerk]', balk)?.addEventListener('click', () => { toon(null); verlofFormulier(v, jaar); });
