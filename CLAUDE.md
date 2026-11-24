@@ -43,8 +43,8 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   verlof plannen.
 - **Kinderen vrij** (afspraak 20-11-2026): schoolvakanties en vrije
   schooldagen staan als `agenda_item` met soort `schoolvakantie` (zonder
-  schoolnaam). De jaarkaart toont ze subtiel als stipje rechtsboven (niet op
-  zaterdag en zondag) met
+  schoolnaam). De jaarkaart toont ze als groene band bovenin de dag (niet op
+  zaterdag en zondag), zodat een vakantie als één periode leest, met
   "Kinderen vrij" in de legenda en de dagdetails; geen effect op uren.
   Twijfelachtige losse schooldagen bewust weggelaten. Geen schoolnaam of
   schooldetails in de repo.

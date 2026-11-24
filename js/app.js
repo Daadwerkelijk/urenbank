@@ -625,7 +625,7 @@ async function toonJaar(main, arg) {
     api.list('agenda_item', { order: 'begin' }).catch(() => []), // alleen weergave: zonder agenda blijft de kaart werken
   ]);
   const status = new Map(verlof.map(v => [v.id, v]));
-  // Schoolvakanties apart van werksessies en info: subtiel stipje "kinderen vrij" (alleen weergave, raakt geen uren)
+  // Schoolvakanties apart van werksessies en info: groene band bovenin, "kinderen vrij" (alleen weergave, raakt geen uren)
   const opDag = (datum, school) => agendaItems.filter(a => (a.soort === 'schoolvakantie') === school && a.begin <= datum && a.eind >= datum);
   const perMaand = Array.from({ length: 12 }, () => []);
   dagen.forEach(d => perMaand[+d.datum.slice(5, 7) - 1].push(d));
@@ -662,7 +662,7 @@ async function toonJaar(main, arg) {
     </div>
     <ul class="legenda" style="margin-bottom:1.25rem">
       <li><span class="stip" style="background:var(--saldo)"></span>Verlofsaldo</li>
-      <li><span class="stip" style="background:var(--saldo);opacity:.55"></span>Gepland, nog niet geboekt</li>
+      <li><span class="stip" style="background:color-mix(in srgb, var(--saldo) 50%, var(--paper))"></span>Gepland, nog niet geboekt</li>
       <li><span class="stip" style="background:var(--bank)"></span>Urenbank</li>
       <li><span class="stip" style="background:var(--overig)"></span>Overig verlof</li>
       <li><span class="stip" style="box-shadow:inset 0 0 0 2px var(--feest)"></span>Feestdag</li>

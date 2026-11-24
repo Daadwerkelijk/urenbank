@@ -13,7 +13,7 @@
   --bank: #c3801a;
   --bank-zacht: #f4e3c4;
   --overig: #7a68a6;
-  --school: #2e8b62;
+  --school: #12a150;
   --feest: #b6463a;
   --plus: #2c7a4d;
   --min: #b6463a;
@@ -39,7 +39,7 @@
     --bank: #e0a040;
     --bank-zacht: #3f3220;
     --overig: #a593d1;
-    --school: #5cc39a;
+    --school: #7ee2a8;
     --feest: #e07467;
     --plus: #5fbf86;
     --min: #e07467;
@@ -237,7 +237,11 @@ dialog form { padding: 1.25rem; display: grid; gap: 1rem; }
 .dag.v-saldo { background: var(--saldo); color: #fff; box-shadow: none; }
 .dag.v-urenbank { background: var(--bank); color: #1d1406; box-shadow: none; }
 .dag.v-overig { background: var(--overig); color: #fff; box-shadow: none; }
-.dag.v-saldo.zacht, .dag.v-urenbank.zacht, .dag.v-overig.zacht { opacity: 0.55; }
+.dag.v-saldo.zacht, .dag.v-urenbank.zacht, .dag.v-overig.zacht { color: var(--ink); }
+/* gepland (nog niet geboekt): lichtere mengkleur i.p.v. doorzichtigheid, zodat randen en markeringen scherp blijven */
+.dag.v-saldo.zacht { background: color-mix(in srgb, var(--saldo) 50%, var(--paper)); }
+.dag.v-urenbank.zacht { background: color-mix(in srgb, var(--bank) 50%, var(--paper)); }
+.dag.v-overig.zacht { background: color-mix(in srgb, var(--overig) 50%, var(--paper)); }
 .dag.feest-ook { box-shadow: inset 0 0 0 2px var(--feest); }
 .dag.agenda::after { content: ''; position: absolute; left: 22%; right: 22%; bottom: 2px; height: 2px; border-radius: 1px; background: var(--ink); opacity: 0.55; }
 .dag.vandaag { outline: 2px solid var(--ink); outline-offset: 1px; }
@@ -392,9 +396,11 @@ body.balk-open .melding { bottom: calc(var(--balk-h, 12rem) + 5rem); }
 .jaar-items { margin: 0; padding-left: 1.1rem; color: var(--muted); display: grid; gap: 0.2rem; overflow-wrap: anywhere; }
 .link-knop { background: none; border: 0; padding: 0.35rem 0; font: inherit; font-weight: 600; color: var(--saldo); text-decoration: underline; cursor: pointer; }
 
-/* Kinderen vrij (schoolvakantie): klein stipje rechtsboven, met een randje zodat het ook op gekleurde dagen zichtbaar is */
-.dag.school::before { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--school); box-shadow: 0 0 0 1.5px var(--surface); }
-.stip-school { background: var(--surface); position: relative; }
-.stip-school::after { content: ''; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 50%; background: var(--school); }
+/* Kinderen vrij: groene band bovenin de dag; aaneengesloten dagen lezen als één periode */
+.dag.school::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 3px 3px 0 0; background: var(--school); box-shadow: 0 1px 0 var(--surface); }
+/* feestdag: band binnen de rode rand, zodat die rondom zichtbaar blijft */
+.dag.feest.school::before, .dag.feest-ook.school::before { top: 2px; left: 2px; right: 2px; border-radius: 1px 1px 0 0; }
+.stip-school { background: var(--surface); position: relative; overflow: hidden; }
+.stip-school::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--school); }
 .dag-balk .chip { white-space: normal; }
 .chip.school { background: color-mix(in srgb, var(--school) 18%, var(--surface)); color: var(--ink); }
