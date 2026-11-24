@@ -18,6 +18,7 @@
   --plus: #2c7a4d;
   --min: #b6463a;
   --vrij: #dfe5ea;
+  --vrijdag: color-mix(in srgb, var(--saldo) 30%, var(--vrij));
   --focus: #c3801a;
   --radius-s: 4px;
   --radius-m: 10px;
@@ -43,6 +44,7 @@
     --plus: #5fbf86;
     --min: #e07467;
     --vrij: #24313a;
+    --vrijdag: color-mix(in srgb, var(--saldo) 20%, var(--vrij));
     color-scheme: dark;
   }
 }
@@ -229,7 +231,8 @@ dialog form { padding: 1.25rem; display: grid; gap: 1rem; }
 }
 .dag.leeg { background: transparent; box-shadow: none; cursor: default; }
 .dag.weekend { background: transparent; color: var(--muted); box-shadow: none; }
-.dag.vrij { background: var(--vrij); box-shadow: none; color: var(--muted); }
+/* vaste vrije dag (woensdag): tussen gewone dag en verlof in, zodat meteen zichtbaar is dat je vrij bent */
+.dag.vrij { background: var(--vrijdag); box-shadow: none; color: var(--ink); }
 .dag.feest { box-shadow: inset 0 0 0 2px var(--feest); color: var(--feest); font-weight: 700; background: var(--surface); }
 .dag.v-saldo { background: var(--saldo); color: #fff; box-shadow: none; }
 .dag.v-urenbank { background: var(--bank); color: #1d1406; box-shadow: none; }

@@ -27,12 +27,20 @@ Supabase, schema `urenbank`. Hosting: GitHub Pages vanaf `main`
   → bovenwettelijk vorig jaar → bovenwettelijk lopend jaar. Instelbaar.
 - **Totaal vrij** = verlofsaldo + urenbank. Omrekening: dagen ÷ 9,
   werkweken ÷ 36.
+- **Vaste vrije dag** (woensdag) krijgt in de jaarkaart een eigen kleur
+  tussen een gewone dag en verlof in (`--vrijdag`), zodat zichtbaar is
+  dat hij dan vrij is.
 - **Dagen aaneengesloten vrij** = verlof + aangrenzende weekenden, vaste
   vrije dagen en feestdagen (bewust "voor het goede gevoel").
 - **Feestdagen**: cao Gemeenten — 5 mei elk jaar, geen Goede Vrijdag.
   1 mei: onbekend of de gebruiker die keuzedag heeft; behandeld als
   werkdag.
+- **Verlof plannen voor de gebruiker** (afspraak 24-11-2026): standaard
+  uit het verlofsaldo, tenzij hij uitdrukkelijk iets anders zegt (urenbank,
+  overig). Niet zelf op urenbank zetten "om saldo te sparen".
 - **KPE/werksessies**: alleen info in de planning, geen effect op uren.
+  In de KPE-week én de week ervoor is de gebruiker aanwezig: daar geen
+  verlof plannen.
 - **Kinderen vrij** (afspraak 20-11-2026): schoolvakanties en vrije
   schooldagen staan als `agenda_item` met soort `schoolvakantie` (zonder
   schoolnaam). De jaarkaart toont ze subtiel als stipje rechtsboven (niet op

@@ -666,7 +666,7 @@ async function toonJaar(main, arg) {
       <li><span class="stip" style="background:var(--bank)"></span>Urenbank</li>
       <li><span class="stip" style="background:var(--overig)"></span>Overig verlof</li>
       <li><span class="stip" style="box-shadow:inset 0 0 0 2px var(--feest)"></span>Feestdag</li>
-      <li><span class="stip" style="background:var(--vrij)"></span>Vaste vrije dag</li>
+      <li><span class="stip" style="background:var(--vrijdag)"></span>Vaste vrije dag</li>
       <li><span class="stip" style="background:var(--surface);box-shadow:inset 0 -3px 0 var(--ink)"></span>Werksessie of info</li>
       ${agendaItems.some(a => a.soort === 'schoolvakantie') ? '<li><span class="stip stip-school"></span>Kinderen vrij</li>' : ''}
     </ul>

@@ -22,7 +22,7 @@ demo (`?demo`), lezen mag in de live-app. Zie skill `rooktest`.
 - [ ] **Urenbank per jaar**: weekuren van januari volgend jaar invullen → urenbank begint daar op 0
 - [ ] **Jaareinde** (klok op november/december of in die maanden): "Let op" vraagt de urenbank op 0 te zetten als hij dat niet is
 - [ ] **Onzin-invoer**: 500 uur in een week, opbouwjaar leeg → begrijpelijke melding, niets opgeslagen
-- [ ] **Jaarkaart**: feestdagen, vaste vrije dagen, verlof (geboekt en gepland) zichtbaar; dag aanklikken toont details in de balk onderin
+- [ ] **Jaarkaart**: feestdagen, vaste vrije dagen (eigen kleur tussen gewone dag en verlof, ook in donker te onderscheiden van gepland verlof), verlof (geboekt en gepland) zichtbaar; dag aanklikken toont details in de balk onderin
 - [ ] **Instellingen**: rooster opslaan; potje uren wijzigen → saldo verandert; volgorde ▲/▼; gekocht verlof toevoegen; feestdag toevoegen en verwijderen
 - [ ] **Jaar wisselen** (‹ ›) op Weken, Verlof en Jaarkaart
 - [ ] **Zoals gepland invullen**: op Overzicht (lege huidige week) en met "= 36" in Weken; urenbank verandert niet
